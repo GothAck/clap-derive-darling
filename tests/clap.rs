@@ -1,6 +1,7 @@
 use clap::{Args, Parser};
 
 #[derive(Parser)]
+#[clap(name = "my_app", author, version)]
 struct Application {
     #[clap(long, short)]
     name: String,

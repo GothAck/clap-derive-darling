@@ -10,12 +10,12 @@ use syn::Ident;
 
 use crate::{common::ClapParserArgsCommon, field::ClapField, RenameAll};
 
-#[allow(dead_code)]
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(clap), forward_attrs(doc), supports(struct_named))]
 pub(crate) struct ClapParser {
     ident: Ident,
     data: ast::Data<Ignored, ClapField>,
+    #[allow(dead_code)]
     attrs: Vec<syn::Attribute>,
 
     #[darling(default)]
@@ -24,12 +24,16 @@ pub(crate) struct ClapParser {
     version: Option<Override<String>>,
     #[darling(default)]
     author: Option<Override<String>>,
+    #[allow(dead_code)]
     #[darling(default)]
     about: Option<Override<String>>,
+    #[allow(dead_code)]
     #[darling(default)]
     long_about: Option<Override<String>>,
+    #[allow(dead_code)]
     #[darling(default)]
     verbatim_doc_comment: bool,
+    #[allow(dead_code)]
     #[darling(default)]
     help_heading: Option<String>,
     #[darling(default)]
@@ -120,6 +124,28 @@ impl ClapParser {
             .clone()
             .unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string());
 
+        let version = self
+            .version
+            .as_ref()
+            .map(|or| match or {
+                Override::Explicit(version) => version,
+                Override::Inherit => env!("CARGO_PKG_VERSION"),
+            })
+            .map(|s| {
+                quote! { .version(#s) }
+            });
+
+        let author = self
+            .author
+            .as_ref()
+            .map(|or| match or {
+                Override::Explicit(author) => author,
+                Override::Inherit => env!("CARGO_PKG_AUTHORS"),
+            })
+            .map(|s| {
+                quote! { .author(#s) }
+            });
+
         quote! {
             impl clap_derive_darling::Args for #ident {
                 fn augment_args<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
@@ -128,6 +154,8 @@ impl ClapParser {
                     #(#augment_args_fields)*
 
                     app
+                        #author
+                        #version
                 }
                 fn augment_args_for_update<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
                     #name_storage
@@ -135,6 +163,8 @@ impl ClapParser {
                     #(#augment_args_for_update_fields)*
 
                     app
+                        #author
+                        #version
                 }
             }
 

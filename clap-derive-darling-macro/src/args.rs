@@ -34,7 +34,6 @@ pub(crate) struct ClapArgs {
     #[allow(dead_code)]
     #[darling(default)]
     verbatim_doc_comment: bool,
-    #[allow(dead_code)]
     #[darling(default)]
     help_heading: Option<String>,
     #[darling(default)]
@@ -123,10 +122,14 @@ impl ClapArgs {
         let author_and_version =
             self.format_author_and_version(self.author.as_ref(), self.version.as_ref());
 
+        let help_heading = self.format_help_heading(self.help_heading.as_ref());
+
         quote! {
             impl clap_derive_darling::Args for #ident {
                 fn augment_args<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
                     #name_storage
+
+                    #help_heading
 
                     #(#augment_args_fields)*
                     app
@@ -134,6 +137,8 @@ impl ClapArgs {
                 }
                 fn augment_args_for_update<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
                     #name_storage
+
+                    #help_heading
 
                     #(#augment_args_for_update_fields)*
 

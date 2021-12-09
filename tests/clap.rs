@@ -1,7 +1,7 @@
 use clap::{Args, Parser};
 
 #[derive(Parser)]
-#[clap(name = "my_app", author, version)]
+#[clap(name = "my_app", author, version, help_heading = "Test heading")]
 struct Application {
     #[clap(long, short)]
     name: String,
@@ -28,7 +28,12 @@ struct Application {
 }
 
 #[derive(Args)]
-#[clap(name = "TestArgs", version, author = "Test Author")]
+#[clap(
+    name = "TestArgs",
+    version,
+    author = "Test Author",
+    help_heading = "Other heading"
+)]
 struct Flatten {
     #[clap(skip)]
     other: u64,

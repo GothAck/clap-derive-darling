@@ -57,4 +57,15 @@ pub trait ClapParserArgsCommon {
 
         quote! { #author #version }
     }
+
+    fn format_help_heading(
+        &self,
+        help_heading: Option<&String>,
+    ) -> Option<proc_macro2::TokenStream> {
+        help_heading.map(|string| {
+            quote! {
+                let app = app.help_heading(#string);
+            }
+        })
+    }
 }

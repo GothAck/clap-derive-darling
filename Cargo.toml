@@ -1,0 +1,29 @@
+[package]
+name = "clap-derive-darling"
+version = "0.1.0"
+authors = ["Greg \"GothAck\" Miell <rust@greg.gothack.ninja>"]
+description = "Clap derive, implemented with darling"
+repository = "https://github.com/GothAck/layeredconf"
+documentation = "https://docs.rs/layeredconf"
+categories = ["config", "encoding", "parsing"]
+readme = "README.md"
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+convert_case = "0.4.0"
+clap-derive-darling-macro = "0.1.0"
+clap = { version = "3.0.0-beta.5", features = ["derive"] }
+once_cell = "1.8.0"
+
+[dev-dependencies]
+
+[lib]
+path = "src/lib.rs"
+
+[workspace]
+members = [".", "clap-derive-darling-macro"]
+
+[patch.crates-io]
+clap-derive-darling = { path = "." }
+clap-derive-darling-macro = { path = "clap-derive-darling-macro" }

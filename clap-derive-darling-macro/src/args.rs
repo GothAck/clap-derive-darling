@@ -8,6 +8,8 @@ use darling::{
 use quote::quote;
 use syn::Ident;
 
+use crate::common::ClapHelpCommon;
+
 use super::{common::ClapParserArgsCommon, field::ClapField, RenameAll};
 
 #[derive(Debug, FromDeriveInput)]
@@ -15,7 +17,6 @@ use super::{common::ClapParserArgsCommon, field::ClapField, RenameAll};
 pub(crate) struct ClapArgs {
     ident: Ident,
     data: ast::Data<Ignored, ClapField>,
-    #[allow(dead_code)]
     attrs: Vec<syn::Attribute>,
 
     #[allow(dead_code)]
@@ -25,12 +26,10 @@ pub(crate) struct ClapArgs {
     version: Option<Override<String>>,
     #[darling(default)]
     author: Option<Override<String>>,
-    #[allow(dead_code)]
     #[darling(default)]
     about: Option<Override<String>>,
-    #[allow(dead_code)]
     #[darling(default)]
-    long_about: Option<Override<String>>,
+    long_about: Option<String>,
     #[allow(dead_code)]
     #[darling(default)]
     verbatim_doc_comment: bool,
@@ -124,6 +123,12 @@ impl ClapArgs {
 
         let help_heading = self.format_help_heading(self.help_heading.as_ref());
 
+        let about = self.format_about(
+            self.attrs_to_docstring_iter(&self.attrs),
+            self.about.clone(),
+            self.long_about.clone(),
+        );
+
         quote! {
             impl clap_derive_darling::Args for #ident {
                 fn augment_args<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
@@ -134,6 +139,7 @@ impl ClapArgs {
                     #(#augment_args_fields)*
                     app
                         #author_and_version
+                        #about
                 }
                 fn augment_args_for_update<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
                     #name_storage
@@ -144,6 +150,7 @@ impl ClapArgs {
 
                     app
                         #author_and_version
+                        #about
                 }
             }
 
@@ -166,3 +173,5 @@ impl ClapArgs {
 }
 
 impl ClapParserArgsCommon for ClapArgs {}
+
+impl ClapHelpCommon for ClapArgs {}

@@ -12,9 +12,9 @@ edition = "2021"
 
 [dependencies]
 darling = "0.13"
-syn = "1.0"
 proc-macro2 = "1.0"
 quote = "1.0"
+syn = "1.0"
 
 [dev-dependencies]
 anyhow = "1.0"

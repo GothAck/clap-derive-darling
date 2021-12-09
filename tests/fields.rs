@@ -1,9 +1,14 @@
 use clap_derive_darling::{Args, Clap, Parser};
 
 #[derive(Parser)]
+/// Application description
+///
+/// Application long description
 struct Application {
+    /// Name short help
     #[clap(long, short)]
     name: String,
+    /// Option short help
     #[clap(long)]
     option: Option<String>,
 
@@ -13,6 +18,9 @@ struct Application {
     #[clap(long)]
     bool: bool,
 
+    /// OptOptT short help
+    ///
+    /// OptOptT long help...
     #[clap(long)]
     opt_opt_t: Option<Option<u64>>,
 
@@ -64,6 +72,7 @@ fn test_flatten_prefix() {
 #[test]
 fn test_reuse_same_struct() {
     #[derive(Parser)]
+    #[clap(about, long_about = "rar")]
     struct Application {
         #[clap(long, short)]
         name: String,

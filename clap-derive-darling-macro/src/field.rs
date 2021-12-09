@@ -2,14 +2,12 @@ use darling::{util::Override, FromField, FromMeta, ToTokens};
 use quote::{format_ident, quote};
 use syn::{GenericArgument, Ident, LitStr, PathArguments, Type};
 
-use super::RenameAll;
+use super::{common::ClapHelpCommon, RenameAll};
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, FromField)]
 #[darling(attributes(clap), forward_attrs(doc))]
 pub(crate) struct ClapField {
     pub ident: Option<Ident>,
-    pub vis: syn::Visibility,
     pub ty: syn::Type,
     pub attrs: Vec<syn::Attribute>,
 
@@ -19,6 +17,7 @@ pub(crate) struct ClapField {
     pub help: Option<String>,
     #[darling(default)]
     pub long_help: Option<String>,
+    #[allow(dead_code)]
     #[darling(default)]
     pub verbatim_doc_comment: bool,
     #[darling(default)]
@@ -29,12 +28,15 @@ pub(crate) struct ClapField {
     pub env: Option<Override<String>>,
     #[darling(default)]
     pub flatten: Option<Override<String>>,
+    #[allow(dead_code)]
     #[darling(default)]
     pub subcommand: bool,
+    #[allow(dead_code)]
     #[darling(default)]
     pub from_global: bool,
     #[darling(default)]
     pub parse: Option<ClapFieldParse>,
+    #[allow(dead_code)]
     #[darling(default)]
     pub arg_enum: bool,
     #[darling(default)]
@@ -386,6 +388,11 @@ impl ClapField {
             let required = self.get_required();
             let short = self.get_short();
             let env = self.get_env();
+            let help = self.format_help(
+                self.attrs_to_docstring_iter(&self.attrs),
+                self.help.clone(),
+                self.long_help.clone(),
+            );
 
             let multiple_values = if self
                 .types_without_generics_eq_vec(&self.get_type_path())
@@ -423,6 +430,7 @@ impl ClapField {
 
                 let app = app.arg(
                     clap::Arg::new(&*___name)
+                        #help
                         #takes_value
                         #multiple_values
                         #value_name
@@ -692,3 +700,5 @@ impl ClapField {
         }
     }
 }
+
+impl ClapHelpCommon for ClapField {}

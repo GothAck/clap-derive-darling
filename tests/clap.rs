@@ -2,10 +2,16 @@ use clap::{Args, Parser};
 
 #[derive(Parser)]
 #[clap(name = "my_app", author, version, help_heading = "Test heading")]
+/// App help
+///
+/// Longer
 struct Application {
     #[clap(long, short)]
+    /// Name
+    ///
+    /// Longer name
     name: String,
-    #[clap(long)]
+    #[clap(long, help = "Option", long_help = "Longer help for Option")]
     option: Option<String>,
 
     #[clap(flatten)]

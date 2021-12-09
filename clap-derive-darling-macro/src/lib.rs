@@ -19,7 +19,7 @@ use syn::parse_macro_input;
 use args::ClapArgs;
 use parser::ClapParser;
 
-#[proc_macro_derive(Parser, attributes(clap))]
+#[proc_macro_derive(Parser, attributes(clap, doc))]
 pub fn derive_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let conf_struct = ClapParser::from_derive_input(&input).expect("Wrong options");
@@ -29,7 +29,7 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
     tokens.into()
 }
 
-#[proc_macro_derive(Args, attributes(clap))]
+#[proc_macro_derive(Args, attributes(clap, doc))]
 pub fn derive_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let conf_struct = ClapArgs::from_derive_input(&input).expect("Wrong options");

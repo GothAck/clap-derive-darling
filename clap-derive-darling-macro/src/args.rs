@@ -10,26 +10,31 @@ use syn::Ident;
 
 use super::{common::ClapParserArgsCommon, field::ClapField, RenameAll};
 
-#[allow(dead_code)]
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(clap), forward_attrs(doc), supports(struct_named))]
 pub(crate) struct ClapArgs {
     ident: Ident,
     data: ast::Data<Ignored, ClapField>,
+    #[allow(dead_code)]
     attrs: Vec<syn::Attribute>,
 
+    #[allow(dead_code)]
     #[darling(default)]
     name: Option<String>,
     #[darling(default)]
     version: Option<Override<String>>,
     #[darling(default)]
     author: Option<Override<String>>,
+    #[allow(dead_code)]
     #[darling(default)]
     about: Option<Override<String>>,
+    #[allow(dead_code)]
     #[darling(default)]
     long_about: Option<Override<String>>,
+    #[allow(dead_code)]
     #[darling(default)]
     verbatim_doc_comment: bool,
+    #[allow(dead_code)]
     #[darling(default)]
     help_heading: Option<String>,
     #[darling(default)]
@@ -115,6 +120,9 @@ impl ClapArgs {
 
         let name_storage = self.to_tokens_name_storage();
 
+        let author_and_version =
+            self.format_author_and_version(self.author.as_ref(), self.version.as_ref());
+
         quote! {
             impl clap_derive_darling::Args for #ident {
                 fn augment_args<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
@@ -122,6 +130,7 @@ impl ClapArgs {
 
                     #(#augment_args_fields)*
                     app
+                        #author_and_version
                 }
                 fn augment_args_for_update<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
                     #name_storage
@@ -129,6 +138,7 @@ impl ClapArgs {
                     #(#augment_args_for_update_fields)*
 
                     app
+                        #author_and_version
                 }
             }
 

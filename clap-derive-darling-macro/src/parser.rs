@@ -124,27 +124,8 @@ impl ClapParser {
             .clone()
             .unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string());
 
-        let version = self
-            .version
-            .as_ref()
-            .map(|or| match or {
-                Override::Explicit(version) => version,
-                Override::Inherit => env!("CARGO_PKG_VERSION"),
-            })
-            .map(|s| {
-                quote! { .version(#s) }
-            });
-
-        let author = self
-            .author
-            .as_ref()
-            .map(|or| match or {
-                Override::Explicit(author) => author,
-                Override::Inherit => env!("CARGO_PKG_AUTHORS"),
-            })
-            .map(|s| {
-                quote! { .author(#s) }
-            });
+        let author_and_version =
+            self.format_author_and_version(self.author.as_ref(), self.version.as_ref());
 
         quote! {
             impl clap_derive_darling::Args for #ident {
@@ -154,8 +135,7 @@ impl ClapParser {
                     #(#augment_args_fields)*
 
                     app
-                        #author
-                        #version
+                        #author_and_version
                 }
                 fn augment_args_for_update<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
                     #name_storage
@@ -163,8 +143,7 @@ impl ClapParser {
                     #(#augment_args_for_update_fields)*
 
                     app
-                        #author
-                        #version
+                        #author_and_version
                 }
             }
 

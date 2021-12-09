@@ -1,3 +1,4 @@
+use darling::util::Override;
 use quote::quote;
 
 pub trait ClapParserArgsCommon {
@@ -29,5 +30,31 @@ pub trait ClapParserArgsCommon {
                 get_cache_str(clap_derive_darling::rename::cache_key(ty, string, prefix), or_else)
             }
         }
+    }
+
+    fn format_author_and_version(
+        &self,
+        author: Option<&Override<String>>,
+        version: Option<&Override<String>>,
+    ) -> proc_macro2::TokenStream {
+        let author = author
+            .map(|or| match or {
+                Override::Explicit(author) => author,
+                Override::Inherit => env!("CARGO_PKG_AUTHORS"),
+            })
+            .map(|s| {
+                quote! { .author(#s) }
+            });
+
+        let version = version
+            .map(|or| match or {
+                Override::Explicit(version) => version,
+                Override::Inherit => env!("CARGO_PKG_VERSION"),
+            })
+            .map(|s| {
+                quote! { .version(#s) }
+            });
+
+        quote! { #author #version }
     }
 }

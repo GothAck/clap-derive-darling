@@ -28,6 +28,7 @@ struct Application {
 }
 
 #[derive(Args)]
+#[clap(name = "TestArgs", version, author = "Test Author")]
 struct Flatten {
     #[clap(skip)]
     other: u64,

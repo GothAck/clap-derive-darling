@@ -21,9 +21,9 @@ struct Application {
 
     #[clap(long)]
     opt_vec_str: Option<Vec<String>>,
-
-    #[clap(long)]
-    core_opt_str: std::option::Option<String>,
+    // This doesn't work, Clap doesn't think it's an Option.
+    // #[clap(long)]
+    // core_opt_str: std::option::Option<String>,
 }
 
 #[derive(Args)]

@@ -38,7 +38,7 @@ pub use once_cell::race::OnceBox;
 /// throughout the application representing the normalized values coming from
 /// the CLI.
 ///
-/// ```rust
+/// ```compile_fail
 /// # use clap::{Clap};
 /// /// My super CLI
 /// #[derive(Clap)]
@@ -55,7 +55,7 @@ pub use once_cell::race::OnceBox;
 ///
 /// The equivalent [`App`] struct + `From` implementation:
 ///
-/// ```rust
+/// ```compile_fail
 /// # use clap::{App, Arg, ArgMatches};
 /// App::new("demo")
 ///     .about("My super CLI")
@@ -154,8 +154,7 @@ pub trait FromArgMatches: Sized {
     /// Motivation: If our application had two CLI options, `--name
     /// <STRING>` and the flag `--debug`, we may create a struct as follows:
     ///
-    #[cfg_attr(not(feature = "derive"), doc = " ```ignore")]
-    #[cfg_attr(feature = "derive", doc = " ```no_run")]
+    /// ```no_run
     /// struct Context {
     ///     name: String,
     ///     debug: bool
@@ -165,8 +164,7 @@ pub trait FromArgMatches: Sized {
     /// We then need to convert the `ArgMatches` that `clap` generated into our struct.
     /// `from_arg_matches` serves as the equivalent of:
     ///
-    #[cfg_attr(not(feature = "derive"), doc = " ```ignore")]
-    #[cfg_attr(feature = "derive", doc = " ```no_run")]
+    /// ```no_run
     /// # use clap::ArgMatches;
     /// # struct Context {
     /// #   name: String,
@@ -202,15 +200,15 @@ pub trait FromArgMatches: Sized {
 ///
 /// # Example
 ///
-#[cfg_attr(not(feature = "derive"), doc = " ```ignore")]
-#[cfg_attr(feature = "derive", doc = " ```")]
-/// #[derive(clap::Parser)]
+
+/// ```compile_fail
+/// #[derive(clap_derive_darling::Parser)]
 /// struct Args {
 ///     #[clap(flatten)]
 ///     logging: LogArgs,
 /// }
 ///
-/// #[derive(clap::Args)]
+/// #[derive(clap_derive_darling::Args)]
 /// struct LogArgs {
 ///     #[clap(long, short = 'v', parse(from_occurrences))]
 ///     verbose: i8,
@@ -240,9 +238,8 @@ pub trait Args: FromArgMatches + Sized {
 ///
 /// # Example
 ///
-#[cfg_attr(not(feature = "derive"), doc = " ```ignore")]
-#[cfg_attr(feature = "derive", doc = " ```")]
-/// #[derive(clap::Parser)]
+/// ```compile_fail
+/// #[derive(clap_derive_darling::Parser)]
 /// struct Args {
 ///     #[clap(subcommand)]
 ///     action: Action,

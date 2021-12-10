@@ -1,9 +1,157 @@
 use darling::util::Override;
-use quote::quote;
+use proc_macro2::{Ident, TokenStream};
+use quote::{format_ident, quote};
 use syn::{AttrStyle, Attribute, LitStr};
 
-pub trait ClapParserArgsCommon {
-    fn to_tokens_name_storage(&self) -> proc_macro2::TokenStream {
+use crate::{field::ClapField, RenameAll};
+
+pub(crate) trait ClapFields {
+    fn get_fields(&self) -> Vec<&ClapField>;
+    fn get_rename_all(&self) -> RenameAll;
+    fn get_rename_all_env(&self) -> RenameAll;
+    fn get_rename_all_value(&self) -> RenameAll;
+}
+
+pub(crate) trait ClapFieldStructs: ClapFields {
+    fn get_fieldstructs(&self) -> Vec<ClapField> {
+        self.get_fields()
+            .iter()
+            .cloned()
+            .cloned()
+            .map(|mut v| {
+                v.rename_all = self.get_rename_all();
+                v.rename_all_env = self.get_rename_all_env();
+                v.rename_all_value = self.get_rename_all_value();
+                v
+            })
+            .collect()
+    }
+
+    fn to_tokens_augment_args_fields(&self) -> Vec<TokenStream> {
+        self.get_fieldstructs()
+            .iter()
+            .map(|f| f.to_tokens_augment())
+            .collect()
+    }
+
+    fn to_tokens_augment_args_for_update_fields(&self) -> Vec<TokenStream> {
+        self.get_fieldstructs()
+            .iter()
+            .map(|f| f.to_tokens_augment_for_update())
+            .collect()
+    }
+
+    fn to_tokens_from_arg_matches_fields(&self) -> Vec<TokenStream> {
+        self.get_fieldstructs()
+            .iter()
+            .map(|f| f.to_tokens_from_arg_matches())
+            .collect()
+    }
+
+    fn to_tokens_update_from_arg_matches_fields(&self) -> Vec<TokenStream> {
+        self.get_fieldstructs()
+            .iter()
+            .map(|f| f.to_tokens_update_from_arg_matches())
+            .collect()
+    }
+}
+
+pub(crate) trait ClapTraitImpls:
+    ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
+{
+    fn get_ident(&self) -> &Ident;
+    fn get_name(&self) -> String;
+
+    fn to_tokens_impl_args(&self) -> TokenStream {
+        let ident = self.get_ident();
+
+        let name_storage = self.to_tokens_name_storage();
+        let help_heading = self.to_tokens_help_heading();
+        let author_and_version = self.to_tokens_author_and_version();
+        let app_call_help_about = self.to_tokens_app_call_help_about();
+
+        let augment_args_fields = self.to_tokens_augment_args_fields();
+        let augment_args_for_update_fields = self.to_tokens_augment_args_for_update_fields();
+
+        quote! {
+            impl clap_derive_darling::Args for #ident {
+                fn augment_args<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
+                    #name_storage
+
+                    #help_heading
+
+                    #(#augment_args_fields)*
+
+                    app
+                        #author_and_version
+                        #app_call_help_about
+                }
+                fn augment_args_for_update<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
+                    #name_storage
+
+                    #help_heading
+
+                    #(#augment_args_for_update_fields)*
+
+                    app
+                        #author_and_version
+                        #app_call_help_about
+                }
+            }
+        }
+    }
+
+    fn to_tokens_impl_from_arg_matches(&self) -> TokenStream {
+        let ident = self.get_ident();
+
+        let from_arg_matches_fields = self.to_tokens_from_arg_matches_fields();
+        let update_from_arg_matches_fields = self.to_tokens_update_from_arg_matches_fields();
+
+        quote! {
+            impl clap_derive_darling::FromArgMatches for #ident {
+                fn from_arg_matches(arg_matches: &clap::ArgMatches, prefix: &Option<String>) -> Result<Self, clap::Error> {
+                    let v = #ident {
+                        #(#from_arg_matches_fields)*
+                    };
+
+                    Ok(v)
+                }
+                fn update_from_arg_matches(&mut self, arg_matches: &clap::ArgMatches, prefix: &Option<String>) -> Result<(), clap::Error> {
+                    #(#update_from_arg_matches_fields)*
+
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    fn to_tokens_impl_into_app(&self) -> TokenStream {
+        let ident = self.get_ident();
+        let name = self.get_name();
+
+        quote! {
+            impl clap::IntoApp for #ident {
+                fn into_app<'help>() -> clap::App<'help> {
+                    let app = clap::App::new(#name);
+                    <Self as clap_derive_darling::Args>::augment_args(app, &None)
+                }
+                fn into_app_for_update<'help>() -> clap::App<'help> {
+                    let app = clap::App::new(#name);
+                    <Self as clap_derive_darling::Args>::augment_args_for_update(app, &None)
+                }
+            }
+
+            impl clap_derive_darling::Clap for #ident {}
+        }
+    }
+}
+
+pub(crate) trait ClapParserArgsCommon {
+    fn get_author(&self) -> Option<&Override<String>>;
+    fn get_version(&self) -> Option<&Override<String>>;
+    fn get_help_heading(&self) -> Option<&String>;
+
+    fn to_tokens_name_storage(&self) -> TokenStream {
         quote! {
             use std::{collections::HashMap, sync::Mutex};
             use clap_derive_darling::OnceBox;
@@ -33,12 +181,9 @@ pub trait ClapParserArgsCommon {
         }
     }
 
-    fn format_author_and_version(
-        &self,
-        author: Option<&Override<String>>,
-        version: Option<&Override<String>>,
-    ) -> proc_macro2::TokenStream {
-        let author = author
+    fn to_tokens_author_and_version(&self) -> TokenStream {
+        let author = self
+            .get_author()
             .map(|or| match or {
                 Override::Explicit(author) => author,
                 Override::Inherit => env!("CARGO_PKG_AUTHORS"),
@@ -47,7 +192,8 @@ pub trait ClapParserArgsCommon {
                 quote! { .author(#s) }
             });
 
-        let version = version
+        let version = self
+            .get_version()
             .map(|or| match or {
                 Override::Explicit(version) => version,
                 Override::Inherit => env!("CARGO_PKG_VERSION"),
@@ -59,11 +205,8 @@ pub trait ClapParserArgsCommon {
         quote! { #author #version }
     }
 
-    fn format_help_heading(
-        &self,
-        help_heading: Option<&String>,
-    ) -> Option<proc_macro2::TokenStream> {
-        help_heading.map(|string| {
+    fn to_tokens_help_heading(&self) -> Option<TokenStream> {
+        self.get_help_heading().map(|string| {
             quote! {
                 let app = app.help_heading(#string);
             }
@@ -71,43 +214,68 @@ pub trait ClapParserArgsCommon {
     }
 }
 
-pub trait ClapHelpCommon {
-    fn attrs_to_docstring_iter<'a>(
-        &self,
-        attrs: &'a [Attribute],
-    ) -> Box<dyn Iterator<Item = String> + 'a> {
-        Box::new(
-            attrs
-                .iter()
-                .filter(|a| {
-                    a.style == AttrStyle::Outer
-                        && a.path.segments.len() == 1
-                        && a.path.segments[0].ident == "doc"
-                })
-                .map(|a| -> LitStr {
-                    let ts = a
-                        .tokens
-                        .clone()
-                        .into_iter()
-                        .skip(1)
-                        .collect::<proc_macro2::TokenStream>();
-                    syn::parse2(ts).unwrap()
-                })
-                .map(|v| {
-                    let v = v.value();
-                    v.trim().to_string()
-                }),
-        )
+pub(crate) trait ClapDocCommon: ClapDocCommonAuto {
+    fn get_attrs(&self) -> Vec<Attribute>;
+    fn get_help_about(&self) -> Option<String>;
+    fn get_long_help_about(&self) -> Option<String>;
+    // fn get_help_ident(&self) -> Ident;
+    // fn get_long_help_ident(&self) -> Ident;
+
+    fn to_tokens_app_call_help_about(&self) -> TokenStream {
+        let help_about = self.get_help_about();
+        let long_help_about = self.get_long_help_about();
+
+        let (doc_help_about, doc_long_help_about) = self.get_docs_short_long();
+
+        let app_call_help_about_ident = self.get_app_call_help_about_ident();
+        let help_about = help_about.or(doc_help_about).map(|string| {
+            quote! {
+                .#app_call_help_about_ident(#string)
+            }
+        });
+
+        let app_call_long_help_about_ident = self.get_app_call_long_help_about_ident();
+        let long_help_about = long_help_about.or(doc_long_help_about).map(|string| {
+            quote! {
+                .#app_call_long_help_about_ident(#string)
+            }
+        });
+
+        quote! {
+            #help_about
+            #long_help_about
+        }
     }
 
-    fn docstring_iter_to_opt_str(
-        &self,
-        iter: Box<dyn Iterator<Item = String> + '_>,
-    ) -> (Option<String>, Option<String>) {
+    fn get_docs(&self) -> Vec<String> {
+        self.get_attrs()
+            .iter()
+            .filter(|a| {
+                a.style == AttrStyle::Outer
+                    && a.path.segments.len() == 1
+                    && a.path.segments[0].ident == "doc"
+            })
+            .map(|a| -> LitStr {
+                let ts = a
+                    .tokens
+                    .clone()
+                    .into_iter()
+                    .skip(1)
+                    .collect::<TokenStream>();
+                syn::parse2(ts).unwrap()
+            })
+            .map(|v| {
+                let v = v.value();
+                v.trim().to_string()
+            })
+            .collect()
+    }
+
+    fn get_docs_short_long(&self) -> (Option<String>, Option<String>) {
         let mut doc_help = Vec::new();
         let mut doc_long_help = Vec::new();
         let mut long = false;
-        for docstr in iter {
+        for docstr in self.get_docs() {
             if long {
                 doc_long_help.push(docstr);
             } else if docstr.is_empty() {
@@ -129,62 +297,50 @@ pub trait ClapHelpCommon {
             },
         )
     }
+}
 
-    fn format_help(
-        &self,
-        iter: Box<dyn Iterator<Item = String> + '_>,
-        help: Option<String>,
-        long_help: Option<String>,
-    ) -> proc_macro2::TokenStream {
-        let (doc_help, doc_long_help) = self.docstring_iter_to_opt_str(iter);
-
-        let help = help.or(doc_help).map(|string| {
-            quote! {
-                .help(#string)
-            }
-        });
-        let long_help = long_help.or(doc_long_help).map(|string| {
-            quote! {
-                .long_help(#string)
-            }
-        });
-
-        quote! {
-            #help
-            #long_help
-        }
+pub(crate) trait ClapDocCommonAuto {
+    type Marker: ClapDocCommonAutoMarker;
+    fn get_app_call_help_about_ident(&self) -> Ident {
+        Self::Marker::get_app_call_help_about_ident()
     }
-
-    fn format_about(
-        &self,
-        iter: Box<dyn Iterator<Item = String> + '_>,
-        about: Option<Override<String>>,
-        long_about: Option<String>,
-    ) -> proc_macro2::TokenStream {
-        let (doc_about, doc_long_about) = self.docstring_iter_to_opt_str(iter);
-
-        let about = about
-            .map(|v| match v {
-                Override::Explicit(v) => {
-                    quote!(#v)
-                }
-                Override::Inherit => quote! { env!("CARGO_PKG_DESCRIPTION") },
-            })
-            .or_else(|| doc_about.map(|v| quote!(#v)))
-            .map(|tokens| {
-                quote! {
-                    .about(#tokens)
-                }
-            });
-        let long_about = long_about.or(doc_long_about).map(|string| {
-            quote! {
-                .long_about(#string)
-            }
-        });
-
-        quote! {
-            #about
-            #long_about
-        }
+    fn get_app_call_long_help_about_ident(&self) -> Ident {
+        Self::Marker::get_app_call_long_help_about_ident()
     }
+}
+
+pub(crate) trait ClapDocCommonAutoMarker: sealed::Sealed {
+    fn get_app_call_help_about_ident() -> Ident;
+    fn get_app_call_long_help_about_ident() -> Ident;
+}
+
+pub(crate) struct ClapDocHelpMarker;
+impl ClapDocCommonAutoMarker for ClapDocHelpMarker {
+    fn get_app_call_help_about_ident() -> Ident {
+        format_ident!("help")
+    }
+    fn get_app_call_long_help_about_ident() -> Ident {
+        format_ident!("long_help")
+    }
+}
+pub(crate) struct ClapDocAboutMarker;
+impl ClapDocCommonAutoMarker for ClapDocAboutMarker {
+    fn get_app_call_help_about_ident() -> Ident {
+        format_ident!("about")
+    }
+    fn get_app_call_long_help_about_ident() -> Ident {
+        format_ident!("long_about")
+    }
+}
+
+pub(crate) trait ClapDocHelp: ClapDocCommonAuto<Marker = ClapDocHelpMarker> {}
+pub(crate) trait ClapDocAbout: ClapDocCommonAuto<Marker = ClapDocAboutMarker> {}
+
+impl<T: ClapDocCommonAuto<Marker = ClapDocHelpMarker>> ClapDocHelp for T {}
+impl<T: ClapDocCommonAuto<Marker = ClapDocAboutMarker>> ClapDocAbout for T {}
+mod sealed {
+    pub trait Sealed {}
+
+    impl Sealed for super::ClapDocHelpMarker {}
+    impl Sealed for super::ClapDocAboutMarker {}
 }

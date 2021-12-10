@@ -9,7 +9,10 @@ use quote::quote;
 use syn::Ident;
 
 use crate::{
-    common::{ClapHelpCommon, ClapParserArgsCommon},
+    common::{
+        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
+        ClapParserArgsCommon, ClapTraitImpls,
+    },
     field::ClapField,
     RenameAll,
 };
@@ -51,24 +54,27 @@ impl ToTokens for ClapParser {
 }
 
 impl ClapParser {
-    fn fields(&self) -> Vec<ClapField> {
+    fn to_tokens_args(&self) -> proc_macro2::TokenStream {
+        let impl_args = self.to_tokens_impl_args();
+        let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches();
+        let impl_into_app = self.to_tokens_impl_into_app();
+
+        quote! {
+            #impl_args
+            #impl_from_arg_matches
+            #impl_into_app
+        }
+    }
+}
+
+impl ClapFields for ClapParser {
+    fn get_fields(&self) -> Vec<&ClapField> {
         self.data
             .as_ref()
             .take_struct()
-            .expect("Should never be enum")
+            .expect("Should always be a struct")
             .fields
-            .iter()
-            .cloned()
-            .cloned()
-            .map(|mut v| {
-                v.rename_all = self.get_rename_all();
-                v.rename_all_env = self.get_rename_all_env();
-                v.rename_all_value = self.get_rename_all_value();
-                v
-            })
-            .collect::<Vec<_>>()
     }
-
     fn get_rename_all(&self) -> RenameAll {
         match &self.rename_all {
             Some(rename_all) => *rename_all,
@@ -89,109 +95,43 @@ impl ClapParser {
             None => crate::default_rename_all_value(),
         }
     }
-
-    fn to_tokens_args(&self) -> proc_macro2::TokenStream {
-        let ident = &self.ident;
-
-        let augment_args_fields = self
-            .fields()
-            .iter()
-            .map(|f| f.to_tokens_augment())
-            .collect::<Vec<_>>();
-
-        let augment_args_for_update_fields = self
-            .fields()
-            .iter()
-            .map(|f| f.to_tokens_augment_for_update())
-            .collect::<Vec<_>>();
-
-        let from_arg_matches_fields = self
-            .fields()
-            .iter()
-            .map(|f| f.to_tokens_from_arg_matches())
-            .collect::<Vec<_>>();
-
-        let update_from_arg_matches_fields = self
-            .fields()
-            .iter()
-            .map(|f| f.to_tokens_update_from_arg_matches())
-            .collect::<Vec<_>>();
-
-        let name_storage = self.to_tokens_name_storage();
-
-        let name = self
-            .name
+}
+impl ClapFieldStructs for ClapParser {}
+impl ClapTraitImpls for ClapParser {
+    fn get_ident(&self) -> &Ident {
+        &self.ident
+    }
+    fn get_name(&self) -> String {
+        self.name
             .clone()
-            .unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string());
-
-        let author_and_version =
-            self.format_author_and_version(self.author.as_ref(), self.version.as_ref());
-
-        let help_heading = self.format_help_heading(self.help_heading.as_ref());
-
-        let about = self.format_about(
-            self.attrs_to_docstring_iter(&self.attrs),
-            self.about.clone(),
-            self.long_about.clone(),
-        );
-
-        quote! {
-            impl clap_derive_darling::Args for #ident {
-                fn augment_args<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
-                    #name_storage
-
-                    #help_heading
-
-                    #(#augment_args_fields)*
-
-                    app
-                        #author_and_version
-                        #about
-                }
-                fn augment_args_for_update<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
-                    #name_storage
-
-                    #help_heading
-
-                    #(#augment_args_for_update_fields)*
-
-                    app
-                        #author_and_version
-                        #about
-                }
-            }
-
-            impl clap_derive_darling::FromArgMatches for #ident {
-                fn from_arg_matches(arg_matches: &clap::ArgMatches, prefix: &Option<String>) -> Result<Self, clap::Error> {
-                    let v = #ident {
-                        #(#from_arg_matches_fields)*
-                    };
-
-                    Ok(v)
-                }
-                fn update_from_arg_matches(&mut self, arg_matches: &clap::ArgMatches, prefix: &Option<String>) -> Result<(), clap::Error> {
-                    #(#update_from_arg_matches_fields)*
-
-                    Ok(())
-                }
-            }
-
-            impl clap::IntoApp for #ident {
-                fn into_app<'help>() -> clap::App<'help> {
-                    let app = clap::App::new(#name);
-                    <Self as clap_derive_darling::Args>::augment_args(app, &None)
-                }
-                fn into_app_for_update<'help>() -> clap::App<'help> {
-                    let app = clap::App::new(#name);
-                    <Self as clap_derive_darling::Args>::augment_args_for_update(app, &None)
-                }
-            }
-
-            impl clap_derive_darling::Clap for #ident {}
-        }
+            .unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string())
     }
 }
-
-impl ClapParserArgsCommon for ClapParser {}
-
-impl ClapHelpCommon for ClapParser {}
+impl ClapParserArgsCommon for ClapParser {
+    fn get_author(&self) -> Option<&Override<String>> {
+        self.author.as_ref()
+    }
+    fn get_version(&self) -> Option<&Override<String>> {
+        self.version.as_ref()
+    }
+    fn get_help_heading(&self) -> Option<&String> {
+        self.help_heading.as_ref()
+    }
+}
+impl ClapDocCommon for ClapParser {
+    fn get_attrs(&self) -> Vec<syn::Attribute> {
+        self.attrs.clone()
+    }
+    fn get_help_about(&self) -> Option<String> {
+        self.about.clone().map(|v| match v {
+            Override::Explicit(v) => v,
+            Override::Inherit => env!("CARGO_PKG_DESCRIPTION").to_string(),
+        })
+    }
+    fn get_long_help_about(&self) -> Option<String> {
+        self.long_about.clone()
+    }
+}
+impl ClapDocCommonAuto for ClapParser {
+    type Marker = ClapDocAboutMarker;
+}

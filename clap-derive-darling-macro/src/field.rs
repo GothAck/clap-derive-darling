@@ -2,8 +2,9 @@ use darling::{util::Override, FromField, FromMeta, ToTokens};
 use quote::{format_ident, quote};
 use syn::{GenericArgument, Ident, LitStr, PathArguments, Type};
 
-use super::{common::ClapHelpCommon, RenameAll};
+use crate::common::{ClapDocCommon, ClapDocCommonAuto, ClapDocHelpMarker};
 
+use super::RenameAll;
 #[derive(Debug, Clone, FromField)]
 #[darling(attributes(clap), forward_attrs(doc))]
 pub(crate) struct ClapField {
@@ -28,7 +29,6 @@ pub(crate) struct ClapField {
     pub env: Option<Override<String>>,
     #[darling(default)]
     pub flatten: Option<Override<String>>,
-    #[allow(dead_code)]
     #[darling(default)]
     pub subcommand: bool,
     #[allow(dead_code)]
@@ -240,6 +240,29 @@ impl ClapField {
         }
     }
 
+    // fn get_vec_option_prefixes(&self) -> (Vec<&'static str>, OptionSynPath) {
+    //     let mut prefixes = Vec::new();
+    //     let mut ty = self.get_type_path();
+
+    //     for _ in 0..100 {
+    //         let mut set = false;
+    //         if self.types_without_generics_eq_vec(&ty).is_some() {
+    //             prefixes.push("Vec");
+    //             set = true;
+    //         } else if self.types_without_generics_eq_option(&ty).is_some() {
+    //             prefixes.push("Option");
+    //             set = true;
+    //         }
+    //         if set {
+    //             ty = self.get_type_new_strip_vec_option(&ty, 1);
+    //         } else {
+    //             break;
+    //         }
+    //     }
+
+    //     (prefixes, ty)
+    // }
+
     fn get_parse(&self) -> ClapFieldParse {
         use ClapFieldParse::*;
 
@@ -255,6 +278,42 @@ impl ClapField {
             TryFromStr(Override::Inherit)
         }
     }
+
+    // fn get_parse_defaulted(&self) -> ClapFieldParse {
+    //     use ClapFieldParse::*;
+
+    //     let parse = self.get_parse();
+
+    //     match &parse {
+    //         FromStr(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
+    //             "::std::convert::From::from",
+    //             Span::call_site(),
+    //         ))),
+    //         FromStr(Override::Explicit(..)) => parse,
+    //         TryFromStr(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
+    //             "::std::str::FromStr::from_str",
+    //             Span::call_site(),
+    //         ))),
+    //         TryFromStr(Override::Explicit(..)) => parse,
+    //         FromOsStr(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
+    //             "::std::convert::From::from",
+    //             Span::call_site(),
+    //         ))),
+    //         FromOsStr(Override::Explicit(..)) => parse,
+    //         TryFromOsStr(Override::Inherit) => FromStr(Override::Inherit),
+    //         TryFromOsStr(Override::Explicit(..)) => parse,
+    //         FromOccurrences(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
+    //             "value as T",
+    //             Span::call_site(),
+    //         ))),
+    //         FromOccurrences(Override::Explicit(..)) => parse,
+    //         FromFlag(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
+    //             "::std::convert::From::from",
+    //             Span::call_site(),
+    //         ))),
+    //         FromFlag(Override::Explicit(..)) => parse,
+    //     }
+    // }
 
     fn get_takes_value(&self) -> proc_macro2::TokenStream {
         if matches!(self.get_parse(), ClapFieldParse::FromFlag(..)) {
@@ -360,7 +419,14 @@ impl ClapField {
     }
 
     pub fn to_tokens_augment(&self) -> proc_macro2::TokenStream {
-        if self.skip.is_some() {
+        if self.subcommand {
+            let ty = &self.ty;
+
+            quote! {
+                let app = <#ty as clap_derive_darling::Subcommand>::augment_subcommands(app);
+                let app = app.setting(clap::AppSettings::SubcommandRequiredElseHelp);
+            }
+        } else if self.skip.is_some() {
             quote! {}
         } else if self.flatten.is_some() {
             let ty = &self.ty;
@@ -388,11 +454,7 @@ impl ClapField {
             let required = self.get_required();
             let short = self.get_short();
             let env = self.get_env();
-            let help = self.format_help(
-                self.attrs_to_docstring_iter(&self.attrs),
-                self.help.clone(),
-                self.long_help.clone(),
-            );
+            let help = self.to_tokens_app_call_help_about();
 
             let multiple_values = if self
                 .types_without_generics_eq_vec(&self.get_type_path())
@@ -456,7 +518,13 @@ impl ClapField {
         let field_name_renamed =
             self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
 
-        if self.skip.is_some() {
+        if self.subcommand {
+            let ty = &self.ty;
+
+            quote! {
+                #ident: { <#ty as clap_derive_darling::FromArgMatches>::from_arg_matches(arg_matches, prefix)? },
+            }
+        } else if self.skip.is_some() {
             quote! {
                 #ident: std::default::Default::default(),
             }
@@ -560,7 +628,21 @@ impl ClapField {
         let field_name_renamed =
             self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
 
-        if self.skip.is_some() {
+        if self.subcommand {
+            let ty = &self.ty;
+
+            quote! {
+                {
+                    #[allow(non_snake_case)]
+                    let #ident = &mut self.#ident;
+                    <#ty as clap_derive_darling::FromArgMatches>::update_from_arg_matches(
+                        #ident,
+                        arg_matches,
+                        prefix,
+                    )?;
+                }
+            }
+        } else if self.skip.is_some() {
             quote! {
                 {
                     #[allow(non_snake_case)]
@@ -701,4 +783,17 @@ impl ClapField {
     }
 }
 
-impl ClapHelpCommon for ClapField {}
+impl ClapDocCommon for ClapField {
+    fn get_attrs(&self) -> Vec<syn::Attribute> {
+        self.attrs.clone()
+    }
+    fn get_help_about(&self) -> Option<String> {
+        self.help.clone()
+    }
+    fn get_long_help_about(&self) -> Option<String> {
+        self.long_help.clone()
+    }
+}
+impl ClapDocCommonAuto for ClapField {
+    type Marker = ClapDocHelpMarker;
+}

@@ -14,7 +14,7 @@ use crate::{
         ClapParserArgsCommon, ClapTraitImpls,
     },
     field::ClapField,
-    RenameAll,
+    RenameAll, RenameAllCasing,
 };
 
 #[derive(Debug, FromDeriveInput)]
@@ -102,9 +102,11 @@ impl ClapTraitImpls for ClapParser {
         &self.ident
     }
     fn get_name(&self) -> String {
-        self.name
-            .clone()
-            .unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string())
+        self.name.clone().unwrap_or_else(|| {
+            self.ident
+                .to_string()
+                .to_rename_all_case(self.get_rename_all())
+        })
     }
 }
 impl ClapParserArgsCommon for ClapParser {

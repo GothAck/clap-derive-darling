@@ -107,10 +107,11 @@ type SynPath = syn::punctuated::Punctuated<syn::PathSegment, syn::token::Colon2>
 type OptionSynPath = Option<SynPath>;
 
 impl ClapField {
-    fn get_name(&self) -> Option<String> {
+    fn get_name(&self) -> String {
         self.name
             .clone()
             .or_else(|| self.ident.as_ref().map(|i| i.to_string()))
+            .expect("Field should have name or ident")
     }
 
     fn get_type_path(&self) -> OptionSynPath {
@@ -348,7 +349,7 @@ impl ClapField {
     }
 
     fn get_short(&self) -> Option<proc_macro2::TokenStream> {
-        let name = self.get_name().unwrap().chars().next().unwrap();
+        let name = self.get_name().chars().next().unwrap();
 
         match &self.short {
             Some(Override::Explicit(short)) => Some(quote! { .short(#short) }),

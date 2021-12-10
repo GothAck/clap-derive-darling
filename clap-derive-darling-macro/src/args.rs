@@ -8,9 +8,12 @@ use darling::{
 use quote::quote;
 use syn::Ident;
 
-use crate::common::{
-    ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-    ClapTraitImpls,
+use crate::{
+    common::{
+        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
+        ClapTraitImpls,
+    },
+    RenameAllCasing,
 };
 
 use super::{common::ClapParserArgsCommon, field::ClapField, RenameAll};
@@ -98,9 +101,11 @@ impl ClapTraitImpls for ClapArgs {
         &self.ident
     }
     fn get_name(&self) -> String {
-        self.name
-            .clone()
-            .unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string())
+        self.name.clone().unwrap_or_else(|| {
+            self.ident
+                .to_string()
+                .to_rename_all_case(self.get_rename_all())
+        })
     }
 }
 impl ClapParserArgsCommon for ClapArgs {

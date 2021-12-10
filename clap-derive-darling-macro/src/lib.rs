@@ -54,15 +54,15 @@ impl Default for ClapType {
 #[derive(Debug, Clone, Copy, FromMeta)]
 pub(crate) enum RenameAll {
     #[darling(rename = "camelCase")]
-    CamelCase,
+    Camel,
     #[darling(rename = "kebab-case")]
-    KebabCase,
+    Kebab,
     #[darling(rename = "PascalCase")]
-    PascalCase,
+    Pascal,
     #[darling(rename = "SCREAMING_SNAKE_CASE")]
-    ScreamingSnakeCase,
+    ScreamingSnake,
     #[darling(rename = "snake_case")]
-    SnakeCase,
+    Snake,
     #[darling(rename = "lower")]
     Lower,
     #[darling(rename = "UPPER")]
@@ -71,16 +71,52 @@ pub(crate) enum RenameAll {
     Verbatim,
 }
 
+pub(crate) trait RenameAllCasing {
+    fn to_rename_all_case(&self, case: RenameAll) -> String;
+}
+
+impl RenameAllCasing for str {
+    fn to_rename_all_case(&self, case: RenameAll) -> String {
+        use convert_case::{Case, Casing};
+        match case {
+            RenameAll::Camel => self.to_case(Case::Camel),
+            RenameAll::Kebab => self.to_case(Case::Kebab),
+            RenameAll::Pascal => self.to_case(Case::Pascal),
+            RenameAll::ScreamingSnake => self.to_case(Case::ScreamingSnake),
+            RenameAll::Snake => self.to_case(Case::Snake),
+            RenameAll::Lower => self.to_case(Case::Lower),
+            RenameAll::Upper => self.to_case(Case::Upper),
+            RenameAll::Verbatim => self.to_string(),
+        }
+    }
+}
+
+impl RenameAllCasing for String {
+    fn to_rename_all_case(&self, case: RenameAll) -> String {
+        use convert_case::{Case, Casing};
+        match case {
+            RenameAll::Camel => self.to_case(Case::Camel),
+            RenameAll::Kebab => self.to_case(Case::Kebab),
+            RenameAll::Pascal => self.to_case(Case::Pascal),
+            RenameAll::ScreamingSnake => self.to_case(Case::ScreamingSnake),
+            RenameAll::Snake => self.to_case(Case::Snake),
+            RenameAll::Lower => self.to_case(Case::Lower),
+            RenameAll::Upper => self.to_case(Case::Upper),
+            RenameAll::Verbatim => self.to_string(),
+        }
+    }
+}
+
 pub(crate) fn default_rename_all() -> RenameAll {
-    RenameAll::KebabCase
+    RenameAll::Kebab
 }
 
 pub(crate) fn default_rename_all_env() -> RenameAll {
-    RenameAll::ScreamingSnakeCase
+    RenameAll::ScreamingSnake
 }
 
 pub(crate) fn default_rename_all_value() -> RenameAll {
-    RenameAll::ScreamingSnakeCase
+    RenameAll::ScreamingSnake
 }
 
 impl ToTokens for RenameAll {
@@ -88,11 +124,11 @@ impl ToTokens for RenameAll {
         use RenameAll::*;
 
         tokens.extend(match self {
-            CamelCase => quote! { clap_derive_darling::rename::camel_case },
-            KebabCase => quote! { clap_derive_darling::rename::kebab_case },
-            PascalCase => quote! { clap_derive_darling::rename::pascal_case },
-            ScreamingSnakeCase => quote! { clap_derive_darling::rename::screaming_snake_case },
-            SnakeCase => quote! { clap_derive_darling::rename::snake_case },
+            Camel => quote! { clap_derive_darling::rename::camel_case },
+            Kebab => quote! { clap_derive_darling::rename::kebab_case },
+            Pascal => quote! { clap_derive_darling::rename::pascal_case },
+            ScreamingSnake => quote! { clap_derive_darling::rename::screaming_snake_case },
+            Snake => quote! { clap_derive_darling::rename::snake_case },
             Lower => quote! { clap_derive_darling::rename::lower_case },
             Upper => quote! { clap_derive_darling::rename::upper_case },
             Verbatim => quote! { clap_derive_darling::rename::verbatim_case },

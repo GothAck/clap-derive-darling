@@ -280,6 +280,9 @@ impl ClapSubcommandVariant {
     fn to_tokents_augment_subcommands_variant(&self) -> proc_macro2::TokenStream {
         let name = self.get_name();
 
+        let author_and_version = self.to_tokens_author_and_version();
+        let app_call_help_about = self.to_tokens_app_call_help_about();
+
         let fields = self.get_fields();
 
         if self.fields.is_newtype() {
@@ -287,11 +290,14 @@ impl ClapSubcommandVariant {
             quote! {
                 let clap_app = clap_app.subcommand({
                     let clap_subcommand = clap::App::new(#name);
-                    let clap_subcommand = clap_subcommand;
+
                     let clap_subcommand = {
                         <#first_field_ty as clap_derive_darling::Args>::augment_args(clap_subcommand, None)
                     };
+
                     clap_subcommand
+                        #author_and_version
+                        #app_call_help_about
                 });
             }
         } else if self.fields.is_struct() {
@@ -310,6 +316,8 @@ impl ClapSubcommandVariant {
                         #(#augment)*
 
                         app
+                            #author_and_version
+                            #app_call_help_about
                     }
                 });
             }

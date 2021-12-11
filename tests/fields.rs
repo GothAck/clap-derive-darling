@@ -123,10 +123,16 @@ fn test_subcommand() {
 
     #[derive(Subcommand)]
     enum Command {
+        /// First about
+        ///
+        /// First long about
         First(FirstCommand),
-        #[clap(name = "2nd")]
+        #[clap(name = "2nd", version = "9.9.9")]
         Second {
             #[clap(long)]
+            /// Embedded option
+            ///
+            /// Longer...
             embedded: Option<String>,
         },
     }

@@ -57,6 +57,10 @@ enum Command {
         #[clap(long)]
         embedded: Option<String>,
     },
+    #[clap(skip)]
+    SkipMe,
+    #[clap(external_subcommand)]
+    External(Vec<String>),
 }
 
 #[derive(Args)]

@@ -138,6 +138,8 @@ fn test_subcommand() {
         },
         #[clap(skip)]
         SkipMe,
+        #[clap(external_subcommand)]
+        External(Vec<String>),
     }
 
     #[derive(Args)]
@@ -173,4 +175,16 @@ fn test_subcommand() {
     let args = vec!["app_name", "--name", "skip-me"];
 
     assert!(Application::try_parse_from(args).is_err());
+
+    // External commands are broken
+
+    // let args = vec!["app_name", "--name", "external", "--external-arg"];
+
+    // let flags = Application::try_parse_from(args).unwrap();
+
+    // assert!(matches!(flags.command, Command::External(..)));
+
+    // if let Command::External(external) = flags.command {
+    //     assert_eq!(external, vec!["--external-arg"]);
+    // }
 }

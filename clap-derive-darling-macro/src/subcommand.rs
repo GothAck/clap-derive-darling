@@ -182,7 +182,6 @@ pub(crate) struct ClapSubcommandVariant {
 
     #[darling(default)]
     skip: bool,
-    #[allow(dead_code)]
     #[darling(default)]
     external_subcommand: bool,
 
@@ -204,6 +203,22 @@ impl ClapSubcommandVariant {
 
         if self.skip {
             quote! {}
+        } else if self.external_subcommand {
+            quote! {
+                if #name == clap_name {
+                    return Ok(#parent_ident::#ident(
+                        ::std::iter::once(::std::string::String::from(clap_name))
+                            .chain(
+                                arg_matches
+                                    .values_of("")
+                                    .into_iter()
+                                    .flatten()
+                                    .map(::std::string::String::from)
+                            )
+                            .collect::<Vec<_>>()
+                    ))
+                }
+            }
         } else if self.fields.is_newtype() {
             let first_field_ty = &fields[0].ty;
             quote! {
@@ -253,6 +268,20 @@ impl ClapSubcommandVariant {
 
         if self.skip {
             quote! {}
+        } else if self.external_subcommand {
+            quote! {
+                #parent_ident::#ident(ref mut clap_arg) if #name == clap_name => {
+                    *clap_arg = ::std::iter::once(::std::string::String::from(clap_name))
+                        .chain(
+                            arg_matches
+                                .values_of("")
+                                .into_iter()
+                                .flatten()
+                                .map(::std::string::String::from)
+                        )
+                        .collect::<Vec<_>>();
+                }
+            }
         } else if self.fields.is_newtype() {
             quote! {
                 #parent_ident::#ident(ref mut clap_arg) if #name == clap_name => {
@@ -298,6 +327,15 @@ impl ClapSubcommandVariant {
 
         if self.skip {
             quote! {}
+        } else if self.external_subcommand {
+            quote! {
+                let clap_app = clap_app.subcommand({
+                    let clap_subcommand = clap::App::new(#name);
+
+                    clap_subcommand
+                });
+                let clap_app = clap_app.setting(clap::AppSettings::AllowExternalSubcommands);
+            }
         } else if self.fields.is_newtype() {
             let first_field_ty = &fields[0].ty;
             quote! {

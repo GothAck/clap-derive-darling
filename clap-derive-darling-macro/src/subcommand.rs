@@ -180,6 +180,12 @@ pub(crate) struct ClapSubcommandVariant {
     #[darling(default)]
     help_heading: Option<String>,
 
+    #[darling(default)]
+    skip: bool,
+    #[allow(dead_code)]
+    #[darling(default)]
+    external_subcommand: bool,
+
     #[darling(skip, default = "crate::default_rename_all")]
     rename_all: RenameAll,
     #[darling(skip, default = "crate::default_rename_all_env")]
@@ -196,7 +202,9 @@ impl ClapSubcommandVariant {
 
         let fields = self.get_fields();
 
-        if self.fields.is_newtype() {
+        if self.skip {
+            quote! {}
+        } else if self.fields.is_newtype() {
             let first_field_ty = &fields[0].ty;
             quote! {
                 if #name == clap_name {
@@ -243,7 +251,9 @@ impl ClapSubcommandVariant {
             })
             .collect::<Vec<_>>();
 
-        if self.fields.is_newtype() {
+        if self.skip {
+            quote! {}
+        } else if self.fields.is_newtype() {
             quote! {
                 #parent_ident::#ident(ref mut clap_arg) if #name == clap_name => {
                     let arg_matches = sub_arg_matches;
@@ -286,7 +296,9 @@ impl ClapSubcommandVariant {
 
         let fields = self.get_fields();
 
-        if self.fields.is_newtype() {
+        if self.skip {
+            quote! {}
+        } else if self.fields.is_newtype() {
             let first_field_ty = &fields[0].ty;
             quote! {
                 let clap_app = clap_app.subcommand({
@@ -336,11 +348,15 @@ impl ClapSubcommandVariant {
     fn to_tokens_has_subcommand(&self) -> proc_macro2::TokenStream {
         let name = self.get_name();
 
-        quote! {
-            {
-                let name = #name;
-                if name == clap_name {
-                    return true;
+        if self.skip {
+            quote! {}
+        } else {
+            quote! {
+                {
+                    let name = #name;
+                    if name == clap_name {
+                        return true;
+                    }
                 }
             }
         }

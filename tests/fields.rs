@@ -136,6 +136,8 @@ fn test_subcommand() {
             /// Longer...
             embedded: Option<String>,
         },
+        #[clap(skip)]
+        SkipMe,
     }
 
     #[derive(Args)]
@@ -167,4 +169,8 @@ fn test_subcommand() {
     if let Command::Second { embedded } = flags.command {
         assert_eq!(embedded, Some("yes".to_string()));
     }
+
+    let args = vec!["app_name", "--name", "skip-me"];
+
+    assert!(Application::try_parse_from(args).is_err());
 }

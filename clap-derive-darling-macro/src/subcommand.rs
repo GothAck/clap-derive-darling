@@ -22,7 +22,8 @@ pub struct ClapSubcommand {
 
 impl ToTokens for ClapSubcommand {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        tokens.extend(self.to_tokens_args());
+        tokens.extend(self.to_tokens_impl_from_arg_matches());
+        tokens.extend(self.to_tokens_impl_subcommand());
     }
 }
 
@@ -53,7 +54,8 @@ impl ClapSubcommand {
             })
             .collect()
     }
-    fn to_tokens_args(&self) -> proc_macro2::TokenStream {
+
+    fn to_tokens_impl_from_arg_matches(&self) -> proc_macro2::TokenStream {
         let ident = &self.ident;
 
         let from_arg_matches_variants = self
@@ -66,26 +68,6 @@ impl ClapSubcommand {
             .get_variants()
             .iter()
             .map(|v| v.to_tokens_update_from_arg_matches_variant())
-            .collect::<Vec<_>>();
-
-        let name_storage = self.to_tokens_name_storage();
-
-        let augment_subcommands_variants = self
-            .get_variants()
-            .iter()
-            .map(|v| v.to_tokents_augment_subcommands_variant())
-            .collect::<Vec<_>>();
-
-        let augment_subcommands_for_update_variants = self
-            .get_variants()
-            .iter()
-            .map(|v| v.to_tokents_augment_subcommands_for_update_variant())
-            .collect::<Vec<_>>();
-
-        let has_subcommands = self
-            .get_variants()
-            .iter()
-            .map(|v| v.to_tokens_has_subcommand())
             .collect::<Vec<_>>();
 
         quote! {
@@ -115,6 +97,34 @@ impl ClapSubcommand {
                     Ok(())
                 }
             }
+        }
+    }
+
+    fn to_tokens_impl_subcommand(&self) -> proc_macro2::TokenStream {
+        let ident = &self.ident;
+
+        let name_storage = self.to_tokens_name_storage();
+
+        let augment_subcommands_variants = self
+            .get_variants()
+            .iter()
+            .map(|v| v.to_tokents_augment_subcommands_variant())
+            .collect::<Vec<_>>();
+
+        let augment_subcommands_for_update_variants = self
+            .get_variants()
+            .iter()
+            .map(|v| v.to_tokents_augment_subcommands_for_update_variant())
+            .collect::<Vec<_>>();
+
+        let has_subcommands = self
+            .get_variants()
+            .iter()
+            .map(|v| v.to_tokens_has_subcommand())
+            .collect::<Vec<_>>();
+
+        quote! {
+
             impl clap_derive_darling::Subcommand for #ident {
                 fn augment_subcommands<'b>(clap_app: clap::App<'b>, prefix: Option<String>) -> clap::App<'b> {
                     #name_storage

@@ -52,7 +52,7 @@ struct Flatten {
 #[derive(Subcommand)]
 enum Command {
     First(FirstCommand),
-    #[clap(name = "2nd", version = "9.9.9")]
+    #[clap(name = "2nd", version = "9.9.9", help_heading = "Rar")]
     Second {
         #[clap(long)]
         embedded: Option<String>,

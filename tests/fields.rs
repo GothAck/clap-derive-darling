@@ -112,6 +112,7 @@ fn test_reuse_same_struct() {
 #[test]
 fn test_subcommand() {
     #[derive(Parser)]
+    #[clap(help_heading = "123")]
     struct Application {
         /// Name short help
         #[clap(long, short)]
@@ -127,7 +128,7 @@ fn test_subcommand() {
         ///
         /// First long about
         First(FirstCommand),
-        #[clap(name = "2nd", version = "9.9.9")]
+        #[clap(name = "2nd", version = "9.9.9", help_heading = "Rar")]
         Second {
             #[clap(long)]
             /// Embedded option

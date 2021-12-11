@@ -10,6 +10,7 @@ mod args;
 mod common;
 mod field;
 mod parser;
+mod subcommand;
 
 use darling::{FromDeriveInput, FromMeta, ToTokens};
 use proc_macro::TokenStream;
@@ -18,6 +19,7 @@ use syn::parse_macro_input;
 
 use args::ClapArgs;
 use parser::ClapParser;
+use subcommand::ClapSubcommand;
 
 #[proc_macro_derive(Parser, attributes(clap, doc))]
 pub fn derive_parser(input: TokenStream) -> TokenStream {
@@ -33,6 +35,16 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
 pub fn derive_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let conf_struct = ClapArgs::from_derive_input(&input).expect("Wrong options");
+
+    let tokens = quote! { #conf_struct };
+
+    tokens.into()
+}
+
+#[proc_macro_derive(Subcommand, attributes(clap))]
+pub fn derive_subcommand(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let conf_struct = ClapSubcommand::from_derive_input(&input).expect("Wrong options");
 
     let tokens = quote! { #conf_struct };
 

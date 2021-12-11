@@ -1,4 +1,4 @@
-use clap::{Args, Parser};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[clap(name = "my_app", author, version, help_heading = "Test heading")]
@@ -31,6 +31,8 @@ struct Application {
     // This doesn't work, Clap doesn't think it's an Option.
     // #[clap(long)]
     // core_opt_str: std::option::Option<String>,
+    #[clap(subcommand)]
+    command: Command,
 }
 
 #[derive(Args)]
@@ -45,4 +47,19 @@ struct Flatten {
     other: u64,
 
     flattened: Option<u32>,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    First(FirstCommand),
+    Second {
+        #[clap(long)]
+        embedded: Option<String>,
+    },
+}
+
+#[derive(Args)]
+struct FirstCommand {
+    #[clap(long)]
+    arg: Option<String>,
 }

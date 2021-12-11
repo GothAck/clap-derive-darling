@@ -1,4 +1,5 @@
-use clap_derive_darling::{Args, Clap, Parser};
+use clap::App;
+use clap_derive_darling::{Args, Clap, Parser, Subcommand};
 
 #[derive(Parser)]
 /// Application description
@@ -106,4 +107,56 @@ fn test_reuse_same_struct() {
     assert_eq!(flags.name, "My app name");
     assert_eq!(flags.db.uri, Some("MY_DB_URI".to_string()));
     assert_eq!(flags.api.timeout_ms, Some(64));
+}
+
+#[test]
+fn test_subcommand() {
+    #[derive(Parser)]
+    struct Application {
+        /// Name short help
+        #[clap(long, short)]
+        name: String,
+
+        #[clap(subcommand)]
+        command: Command,
+    }
+
+    #[derive(Subcommand)]
+    enum Command {
+        First(FirstCommand),
+        Second {
+            #[clap(long)]
+            embedded: Option<String>,
+        },
+    }
+
+    #[derive(Args)]
+    struct FirstCommand {
+        #[clap(long)]
+        arg: Option<String>,
+    }
+
+    let args = vec!["app_name", "--name", "rar", "first", "--arg", "thing"];
+
+    let flags = Application::try_parse_from(args).unwrap();
+
+    assert_eq!(flags.name, "rar");
+
+    assert!(matches!(flags.command, Command::First(..)));
+
+    if let Command::First(command) = flags.command {
+        assert_eq!(command.arg, Some("thing".to_string()));
+    }
+
+    let args = vec!["app_name", "--name", "lala", "second", "--embedded", "yes"];
+
+    let flags = Application::try_parse_from(args).unwrap();
+
+    assert_eq!(flags.name, "lala");
+
+    assert!(matches!(flags.command, Command::Second { .. }));
+
+    if let Command::Second { embedded } = flags.command {
+        assert_eq!(embedded, Some("yes".to_string()));
+    }
 }

@@ -629,30 +629,19 @@ impl ClapField {
         let field_name_renamed =
             self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
 
-        if self.subcommand {
-            let ty = &self.ty;
+        let update_from_arg_matches_raw = self.to_tokens_update_from_arg_matches_raw();
 
+        if self.subcommand || self.skip.is_some() {
             quote! {
                 {
                     #[allow(non_snake_case)]
                     let #ident = &mut self.#ident;
-                    <#ty as clap_derive_darling::FromArgMatches>::update_from_arg_matches(
-                        #ident,
-                        arg_matches,
-                        prefix.clone(),
-                    )?;
-                }
-            }
-        } else if self.skip.is_some() {
-            quote! {
-                {
-                    #[allow(non_snake_case)]
-                    let #ident = &mut self.#ident;
-                    *#ident = std::default::Default::default();
+
+                    #update_from_arg_matches_raw
                 }
             }
         } else if self.flatten.is_some() {
-            let (prefix_ident, subprefix) = self.get_flatten();
+            let (_, subprefix) = self.get_flatten();
 
             quote! {
                 {
@@ -660,7 +649,8 @@ impl ClapField {
 
                     #[allow(non_snake_case)]
                     let #ident = &mut self.#ident;
-                    clap_derive_darling::FromArgMatches::update_from_arg_matches(#ident, arg_matches, #prefix_ident.clone())?;
+
+                    #update_from_arg_matches_raw
                 }
             }
         } else if self
@@ -671,8 +661,121 @@ impl ClapField {
                 {
                     #[allow(non_snake_case)]
                     let #ident = &mut self.#ident;
-                    *#ident = arg_matches.is_present(&#field_name_renamed);
+
+                    #update_from_arg_matches_raw
                 }
+            }
+        } else if self.types_without_generics_eq_option(&type_path).is_some() {
+            let next_type_path = self.get_type_new_strip_option(&type_path, 1);
+
+            #[allow(clippy::if_same_then_else)]
+            if self
+                .types_without_generics_eq_vec(&next_type_path)
+                .is_some()
+            {
+                // FIXME: ___name is created twice when processing subcommand
+                quote! {
+                    {
+                        let ___name = #field_name_renamed;
+                        if arg_matches.is_present(&___name) {
+                            #[allow(non_snake_case)]
+                            let #ident = &mut self.#ident;
+
+                            #update_from_arg_matches_raw
+                        }
+                    }
+                }
+            } else if self
+                .types_without_generics_eq_option(&next_type_path)
+                .is_some()
+            {
+                quote! {
+                    {
+                        let ___name = #field_name_renamed;
+                        if arg_matches.is_present(&___name) {
+                            #[allow(non_snake_case)]
+                            let #ident = &mut self.#ident;
+
+                            #update_from_arg_matches_raw
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    {
+                        let ___name = #field_name_renamed;
+                        if arg_matches.is_present(&___name) {
+                            #[allow(non_snake_case)]
+                            let #ident = &mut self.#ident;
+
+                            #update_from_arg_matches_raw
+                        }
+                    }
+                }
+            }
+        } else if self.types_without_generics_eq_vec(&type_path).is_some() {
+            quote! {
+                {
+                    let ___name = #field_name_renamed;
+                    if arg_matches.is_present(&___name) {
+                        #[allow(non_snake_case)]
+                        let #ident = &mut self.#ident;
+
+                        #update_from_arg_matches_raw
+                    }
+                }
+            }
+        } else {
+            quote! {
+                {
+                    let ____name = #field_name_renamed;
+                    if arg_matches.is_present(&____name) {
+                        #[allow(non_snake_case)]
+                        let #ident = &mut self.#ident;
+
+                        #update_from_arg_matches_raw
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn to_tokens_update_from_arg_matches_raw(&self) -> proc_macro2::TokenStream {
+        let ident = &self.ident;
+        let type_path = self.get_type_path();
+
+        let name = self.get_name();
+        let field_name_renamed =
+            self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+
+        if self.subcommand {
+            let ty = &self.ty;
+
+            quote! {
+                <#ty as clap_derive_darling::FromArgMatches>::update_from_arg_matches(
+                    #ident,
+                    arg_matches,
+                    prefix,
+                )?;
+            }
+        } else if self.skip.is_some() {
+            quote! {
+                *#ident = std::default::Default::default();
+            }
+        } else if self.flatten.is_some() {
+            let (prefix_ident, subprefix) = self.get_flatten();
+
+            quote! {
+                #subprefix
+
+                clap_derive_darling::FromArgMatches::update_from_arg_matches(#ident, arg_matches, #prefix_ident)?;
+            }
+        } else if self
+            .types_without_generics_eq(&type_path, &[quote!(bool)])
+            .is_some()
+        {
+            quote! {
+                *#ident = arg_matches.is_present(&#field_name_renamed);
             }
         } else if self.types_without_generics_eq_option(&type_path).is_some() {
             let next_type_path = self.get_type_new_strip_option(&type_path, 1);
@@ -685,8 +788,6 @@ impl ClapField {
                     {
                         let ___name = #field_name_renamed;
                         if arg_matches.is_present(&___name) {
-                            #[allow(non_snake_case)]
-                            let #ident = &mut self.#ident;
                             *#ident = Some(arg_matches
                                 .values_of(&___name)
                                 .map(|v| {
@@ -705,8 +806,6 @@ impl ClapField {
                     {
                         let ___name = #field_name_renamed;
                         if arg_matches.is_present(&___name) {
-                            #[allow(non_snake_case)]
-                            let #ident = &mut self.#ident;
                             *#ident = Some(arg_matches
                                 .value_of(&___name)
                                 .map(|s| ::std::str::FromStr::from_str(s).unwrap()));
@@ -718,8 +817,6 @@ impl ClapField {
                     {
                         let ___name = #field_name_renamed;
                         if arg_matches.is_present(&___name) {
-                            #[allow(non_snake_case)]
-                            let #ident = &mut self.#ident;
                             *#ident = arg_matches
                                 .value_of(&___name)
                                 .map(|s| ::std::str::FromStr::from_str(s).unwrap());
@@ -732,8 +829,6 @@ impl ClapField {
                 {
                     let ___name = #field_name_renamed;
                     if arg_matches.is_present(&___name) {
-                        #[allow(non_snake_case)]
-                        let #ident = &mut self.#ident;
                         *#ident = arg_matches
                             .values_of(&___name)
                             .map(|v| {
@@ -754,8 +849,6 @@ impl ClapField {
                 {
                     let ____name = #field_name_renamed;
                     if arg_matches.is_present(&____name) {
-                        #[allow(non_snake_case)]
-                        let #ident = &mut self.#ident;
                         *#ident = arg_matches
                             .value_of(&____name)
                             .map(|s| ::std::str::FromStr::from_str(s).unwrap())

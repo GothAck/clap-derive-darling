@@ -14,7 +14,7 @@ extern crate clap;
 
 use clap::{App, ArgMatches, Error, IntoApp};
 
-pub use clap_derive_darling_macro::{Args, Parser};
+pub use clap_derive_darling_macro::{Args, Parser, Subcommand};
 
 pub use once_cell::race::OnceBox;
 

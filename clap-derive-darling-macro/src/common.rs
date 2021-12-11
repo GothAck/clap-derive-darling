@@ -75,7 +75,7 @@ pub(crate) trait ClapTraitImpls:
 
         quote! {
             impl clap_derive_darling::Args for #ident {
-                fn augment_args<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
+                fn augment_args(app: clap::App<'_>, prefix: Option<String>) -> clap::App<'_> {
                     #name_storage
 
                     #help_heading
@@ -86,7 +86,7 @@ pub(crate) trait ClapTraitImpls:
                         #author_and_version
                         #app_call_help_about
                 }
-                fn augment_args_for_update<'a>(app: clap::App<'a>, prefix: &Option<String>) -> clap::App<'a> {
+                fn augment_args_for_update(app: clap::App<'_>, prefix: Option<String>) -> clap::App<'_> {
                     #name_storage
 
                     #help_heading
@@ -109,14 +109,14 @@ pub(crate) trait ClapTraitImpls:
 
         quote! {
             impl clap_derive_darling::FromArgMatches for #ident {
-                fn from_arg_matches(arg_matches: &clap::ArgMatches, prefix: &Option<String>) -> Result<Self, clap::Error> {
+                fn from_arg_matches(arg_matches: &clap::ArgMatches, prefix: Option<String>) -> Result<Self, clap::Error> {
                     let v = #ident {
                         #(#from_arg_matches_fields)*
                     };
 
                     Ok(v)
                 }
-                fn update_from_arg_matches(&mut self, arg_matches: &clap::ArgMatches, prefix: &Option<String>) -> Result<(), clap::Error> {
+                fn update_from_arg_matches(&mut self, arg_matches: &clap::ArgMatches, prefix: Option<String>) -> Result<(), clap::Error> {
                     #(#update_from_arg_matches_fields)*
 
                     Ok(())
@@ -133,11 +133,11 @@ pub(crate) trait ClapTraitImpls:
             impl clap::IntoApp for #ident {
                 fn into_app<'help>() -> clap::App<'help> {
                     let app = clap::App::new(#name);
-                    <Self as clap_derive_darling::Args>::augment_args(app, &None)
+                    <Self as clap_derive_darling::Args>::augment_args(app, None)
                 }
                 fn into_app_for_update<'help>() -> clap::App<'help> {
                     let app = clap::App::new(#name);
-                    <Self as clap_derive_darling::Args>::augment_args_for_update(app, &None)
+                    <Self as clap_derive_darling::Args>::augment_args_for_update(app, None)
                 }
             }
 

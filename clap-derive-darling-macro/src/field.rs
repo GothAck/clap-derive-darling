@@ -398,11 +398,11 @@ impl ClapField {
             };
 
             (
-                quote!(&subprefix),
+                quote!(subprefix),
                 Some(quote! {
                     let subprefix = {
                         let mut vec = Vec::new();
-                        if let Some(prefix) = prefix {
+                        if let Some(prefix) = prefix.as_ref() {
                             vec.push(prefix.to_string());
                         }
                         #prefix
@@ -424,7 +424,7 @@ impl ClapField {
             let ty = &self.ty;
 
             quote! {
-                let app = <#ty as clap_derive_darling::Subcommand>::augment_subcommands(app);
+                let app = <#ty as clap_derive_darling::Subcommand>::augment_subcommands(app, prefix.clone());
                 let app = app.setting(clap::AppSettings::SubcommandRequiredElseHelp);
             }
         } else if self.skip.is_some() {
@@ -439,7 +439,7 @@ impl ClapField {
 
                 #subprefix
 
-                let app = <#ty as clap_derive_darling::Args>::augment_args(app, #prefix_ident);
+                let app = <#ty as clap_derive_darling::Args>::augment_args(app, #prefix_ident.clone());
                 let app = app.help_heading(old_heading);
             }
         } else {
@@ -471,7 +471,7 @@ impl ClapField {
                     let ident = format_ident!("___name_long");
                     (
                         Some(
-                            quote! { let #ident = get_cache_str_keyed("name_long", #name, prefix, || #long); },
+                            quote! { let #ident = get_cache_str_keyed("name_long", #name, &prefix, || #long); },
                         ),
                         Some(quote! { .long(#ident) }),
                     )
@@ -487,8 +487,8 @@ impl ClapField {
             };
 
             quote! {
-                let ___name = get_cache_str_keyed("name", #name, prefix, || #name_renamed );
-                let ___name_value = get_cache_str_keyed("name_value", #name, prefix, || #name_renamed_value );
+                let ___name = get_cache_str_keyed("name", #name, &prefix, || #name_renamed );
+                let ___name_value = get_cache_str_keyed("name_value", #name, &prefix, || #name_renamed_value );
                 #long_var
 
                 let app = app.arg(
@@ -523,7 +523,7 @@ impl ClapField {
             let ty = &self.ty;
 
             quote! {
-                #ident: { <#ty as clap_derive_darling::FromArgMatches>::from_arg_matches(arg_matches, prefix)? },
+                #ident: { <#ty as clap_derive_darling::FromArgMatches>::from_arg_matches(arg_matches, prefix.clone())? },
             }
         } else if self.skip.is_some() {
             quote! {
@@ -639,7 +639,7 @@ impl ClapField {
                     <#ty as clap_derive_darling::FromArgMatches>::update_from_arg_matches(
                         #ident,
                         arg_matches,
-                        prefix,
+                        prefix.clone(),
                     )?;
                 }
             }
@@ -660,7 +660,7 @@ impl ClapField {
 
                     #[allow(non_snake_case)]
                     let #ident = &mut self.#ident;
-                    clap_derive_darling::FromArgMatches::update_from_arg_matches(#ident, arg_matches, #prefix_ident)?;
+                    clap_derive_darling::FromArgMatches::update_from_arg_matches(#ident, arg_matches, #prefix_ident.clone())?;
                 }
             }
         } else if self
@@ -774,7 +774,7 @@ impl ClapField {
     ) -> proc_macro2::TokenStream {
         if let Some(prefix) = prefix {
             quote! {
-                #rename(clap_derive_darling::rename::prefix(#name, #prefix))
+                #rename(clap_derive_darling::rename::prefix(#name, &#prefix))
             }
         } else {
             quote! {

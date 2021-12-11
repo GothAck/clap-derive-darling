@@ -124,6 +124,7 @@ fn test_subcommand() {
     #[derive(Subcommand)]
     enum Command {
         First(FirstCommand),
+        #[clap(name = "2nd")]
         Second {
             #[clap(long)]
             embedded: Option<String>,
@@ -148,7 +149,7 @@ fn test_subcommand() {
         assert_eq!(command.arg, Some("thing".to_string()));
     }
 
-    let args = vec!["app_name", "--name", "lala", "second", "--embedded", "yes"];
+    let args = vec!["app_name", "--name", "lala", "2nd", "--embedded", "yes"];
 
     let flags = Application::try_parse_from(args).unwrap();
 

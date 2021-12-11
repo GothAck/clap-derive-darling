@@ -179,12 +179,13 @@ pub(crate) struct ClapSubcommandVariant {
     verbatim_doc_comment: bool,
     #[darling(default)]
     help_heading: Option<String>,
-    #[darling(default)]
-    rename_all: Option<super::RenameAll>,
-    #[darling(default)]
-    rename_all_env: Option<super::RenameAll>,
-    #[darling(default)]
-    rename_all_value: Option<super::RenameAll>,
+
+    #[darling(skip, default = "crate::default_rename_all")]
+    rename_all: RenameAll,
+    #[darling(skip, default = "crate::default_rename_all_env")]
+    rename_all_env: RenameAll,
+    #[darling(skip, default = "crate::default_rename_all_value")]
+    rename_all_value: RenameAll,
 }
 
 impl ClapSubcommandVariant {
@@ -351,24 +352,15 @@ impl ClapFields for ClapSubcommandVariant {
         self.fields.iter().collect()
     }
     fn get_rename_all(&self) -> RenameAll {
-        match &self.rename_all {
-            Some(rename_all) => *rename_all,
-            None => crate::default_rename_all(),
-        }
+        self.rename_all
     }
 
     fn get_rename_all_env(&self) -> RenameAll {
-        match &self.rename_all_env {
-            Some(rename_all) => *rename_all,
-            None => crate::default_rename_all_env(),
-        }
+        self.rename_all_env
     }
 
     fn get_rename_all_value(&self) -> RenameAll {
-        match &self.rename_all_value {
-            Some(rename_all) => *rename_all,
-            None => crate::default_rename_all_value(),
-        }
+        self.rename_all_value
     }
 }
 impl ClapFieldStructs for ClapSubcommandVariant {}

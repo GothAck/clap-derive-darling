@@ -14,7 +14,7 @@ struct Application {
     #[clap(long, help = "Option", long_help = "Longer help for Option")]
     option: Option<String>,
 
-    #[clap(flatten)]
+    #[clap(flatten = "flat")]
     flatten: Flatten,
 
     #[clap(long, arg_enum)]
@@ -51,6 +51,7 @@ struct Flatten {
     #[clap(skip)]
     other: u64,
 
+    #[clap(long)]
     flattened: Option<u32>,
 }
 

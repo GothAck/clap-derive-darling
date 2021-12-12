@@ -12,9 +12,9 @@ use std::ffi::OsString;
 
 extern crate clap;
 
-use clap::{App, ArgMatches, Error, IntoApp};
+use clap::{App, ArgMatches, Error, IntoApp, PossibleValue};
 
-pub use clap_derive_darling_macro::{Args, Parser, Subcommand};
+pub use clap_derive_darling_macro::{ArgEnum, Args, Parser, Subcommand};
 
 pub use once_cell::race::OnceBox;
 
@@ -264,4 +264,50 @@ pub trait Subcommand: FromArgMatches + Sized {
     fn augment_subcommands_for_update(app: App<'_>, prefix: Option<String>) -> App<'_>;
     /// Test whether `Self` can parse a specific subcommand
     fn has_subcommand(name: &str) -> bool;
+}
+
+/// Parse arguments into enums.
+///
+/// When deriving [`Parser`], a field whose type implements `ArgEnum` can have the attribute
+/// `#[clap(arg_enum)]`.  In addition to parsing, help and error messages may report possible
+/// variants.
+///
+/// # Example
+///
+/// ```
+/// #[derive(clap::Parser)]
+/// struct Args {
+///     #[clap(arg_enum)]
+///     level: Level,
+/// }
+///
+/// #[derive(clap::ArgEnum, Clone)]
+/// enum Level {
+///     Debug,
+///     Info,
+///     Warning,
+///     Error,
+/// }
+/// ```
+pub trait ArgEnum: Sized + Clone {
+    /// All possible argument values, in display order.
+    fn value_variants<'a>() -> &'a [Self];
+
+    /// Parse an argument into `Self`.
+    fn from_str(input: &str, ignore_case: bool) -> Result<Self, String> {
+        Self::value_variants()
+            .iter()
+            .find(|v| {
+                v.to_possible_value()
+                    .expect("ArgEnum::value_variants contains only values with a corresponding ArgEnum::to_possible_value")
+                    .matches(input, ignore_case)
+            })
+            .cloned()
+            .ok_or_else(|| format!("Invalid variant: {}", input))
+    }
+
+    /// The canonical argument value.
+    ///
+    /// The value is `None` for skipped variants.
+    fn to_possible_value<'a>(&self) -> Option<PossibleValue<'a>>;
 }

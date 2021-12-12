@@ -11,7 +11,7 @@ use syn::Ident;
 use crate::{
     common::{
         ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapParserArgsCommon, ClapTraitImpls,
+        ClapParserArgsCommon, ClapRename, ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
@@ -89,16 +89,18 @@ impl ClapFields for ClapParser {
     }
 }
 impl ClapFieldStructs for ClapParser {}
-impl ClapTraitImpls for ClapParser {
-    fn get_ident(&self) -> &Ident {
-        &self.ident
-    }
+impl ClapRename for ClapParser {
     fn get_name(&self) -> String {
         self.name.clone().unwrap_or_else(|| {
             self.ident
                 .to_string()
                 .to_rename_all_case(self.get_rename_all())
         })
+    }
+}
+impl ClapTraitImpls for ClapParser {
+    fn get_ident(&self) -> &Ident {
+        &self.ident
     }
 }
 impl ClapParserArgsCommon for ClapParser {

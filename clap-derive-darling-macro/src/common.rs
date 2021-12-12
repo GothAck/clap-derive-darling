@@ -56,11 +56,31 @@ pub(crate) trait ClapFieldStructs: ClapFields {
     }
 }
 
+pub(crate) trait ClapRename {
+    fn get_name(&self) -> String;
+
+    fn to_tokens_rename_all(
+        &self,
+        rename: RenameAll,
+        prefix: Option<TokenStream>,
+        name: TokenStream,
+    ) -> TokenStream {
+        if let Some(prefix) = prefix {
+            quote! {
+                #rename(clap_derive_darling::rename::prefix(#name, &#prefix))
+            }
+        } else {
+            quote! {
+                #rename(#name)
+            }
+        }
+    }
+}
+
 pub(crate) trait ClapTraitImpls:
-    ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
+    ClapRename + ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
 {
     fn get_ident(&self) -> &Ident;
-    fn get_name(&self) -> String;
 
     fn to_tokens_impl_args(&self) -> TokenStream {
         let ident = self.get_ident();

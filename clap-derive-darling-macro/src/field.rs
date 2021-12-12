@@ -36,7 +36,6 @@ pub(crate) struct ClapField {
     pub from_global: bool,
     #[darling(default)]
     pub parse: Option<ClapFieldParse>,
-    #[allow(dead_code)]
     #[darling(default)]
     pub arg_enum: bool,
     #[darling(default)]
@@ -486,6 +485,20 @@ impl ClapField {
                 Some(quote! { .value_name(&___name_value) })
             };
 
+            let validator = if self.arg_enum {
+                quote! {
+                    .possible_values(
+                        <#ty_no_opt_vec as clap_derive_darling::ArgEnum>::value_variants()
+                            .iter()
+                            .filter_map(clap_derive_darling::ArgEnum::to_possible_value),
+                    )
+                }
+            } else {
+                quote! {
+                    .validator(|s| ::std::str::FromStr::from_str(s).map(|_: #ty_no_opt_vec| ()))
+                }
+            };
+
             quote! {
                 let ___name = get_cache_str_keyed("name", #name, &prefix, || #name_renamed );
                 let ___name_value = get_cache_str_keyed("name_value", #name, &prefix, || #name_renamed_value );
@@ -497,7 +510,7 @@ impl ClapField {
                         #takes_value
                         #multiple_values
                         #value_name
-                        .validator(|s| ::std::str::FromStr::from_str(s).map(|_: #ty_no_opt_vec| ()))
+                        #validator
                         #required
                         #short
                         #long_call
@@ -518,6 +531,17 @@ impl ClapField {
         let name = self.get_name();
         let field_name_renamed =
             self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+
+        let mapper = if self.arg_enum {
+            let ty_without_vec_option = self.get_type_new_strip_vec_option(&type_path, 10);
+            quote! {
+                <#ty_without_vec_option as clap_derive_darling::ArgEnum>::from_str(s, false).unwrap()
+            }
+        } else {
+            quote! {
+                ::std::str::FromStr::from_str(s).unwrap()
+            }
+        };
 
         if self.subcommand {
             let ty = &self.ty;
@@ -558,7 +582,7 @@ impl ClapField {
                         Some(arg_matches
                             .values_of(&#field_name_renamed)
                             .map(|v| {
-                                v.map::<String, _>(|s| ::std::str::FromStr::from_str(s).unwrap())
+                                v.map::<String, _>(|s| #mapper)
                                     .collect()
                             })
                             .unwrap_or_else(Vec::new))
@@ -574,7 +598,7 @@ impl ClapField {
                     #ident: if arg_matches.is_present(&#field_name_renamed) {
                         Some(arg_matches
                             .value_of(&#field_name_renamed)
-                            .map(|s| ::std::str::FromStr::from_str(s).unwrap()))
+                            .map(|s| #mapper))
                     } else {
                         None
                     },
@@ -584,7 +608,7 @@ impl ClapField {
                     #ident: if arg_matches.is_present(&#field_name_renamed) {
                         Some(arg_matches
                             .value_of(&#field_name_renamed)
-                            .map(|s| ::std::str::FromStr::from_str(s).unwrap())
+                            .map(|s| #mapper)
                             .expect("app should verify arg required"))
                     } else {
                         None
@@ -597,7 +621,7 @@ impl ClapField {
                     arg_matches
                         .values_of(&#field_name_renamed)
                         .map(|v| {
-                            v.map::<String, _>(|s| ::std::str::FromStr::from_str(s).unwrap())
+                            v.map::<String, _>(|s| #mapper)
                                 .collect()
                         })
                         .unwrap_or_else(Vec::new)
@@ -614,7 +638,7 @@ impl ClapField {
                 #ident: {
                     arg_matches
                         .value_of(&#field_name_renamed)
-                        .map(|s| ::std::str::FromStr::from_str(s).unwrap())
+                        .map(|s| #mapper)
                         #expect
                 },
             }
@@ -748,6 +772,17 @@ impl ClapField {
         let field_name_renamed =
             self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
 
+        let mapper = if self.arg_enum {
+            let ty_without_vec_option = self.get_type_new_strip_vec_option(&type_path, 10);
+            quote! {
+                <#ty_without_vec_option as clap_derive_darling::ArgEnum>::from_str(s, false).unwrap()
+            }
+        } else {
+            quote! {
+                ::std::str::FromStr::from_str(s).unwrap()
+            }
+        };
+
         if self.subcommand {
             let ty = &self.ty;
 
@@ -791,7 +826,7 @@ impl ClapField {
                             *#ident = Some(arg_matches
                                 .values_of(&___name)
                                 .map(|v| {
-                                    v.map::<String, _>(|s| ::std::str::FromStr::from_str(s).unwrap())
+                                    v.map::<String, _>(|s| #mapper)
                                         .collect()
                                 })
                                 .unwrap_or_else(Vec::new));
@@ -808,7 +843,7 @@ impl ClapField {
                         if arg_matches.is_present(&___name) {
                             *#ident = Some(arg_matches
                                 .value_of(&___name)
-                                .map(|s| ::std::str::FromStr::from_str(s).unwrap()));
+                                .map(|s| #mapper));
                         }
                     }
                 }
@@ -819,7 +854,7 @@ impl ClapField {
                         if arg_matches.is_present(&___name) {
                             *#ident = arg_matches
                                 .value_of(&___name)
-                                .map(|s| ::std::str::FromStr::from_str(s).unwrap());
+                                .map(|s| #mapper);
                         }
                     }
                 }
@@ -832,7 +867,7 @@ impl ClapField {
                         *#ident = arg_matches
                             .values_of(&___name)
                             .map(|v| {
-                                v.map::<String, _>(|s| ::std::str::FromStr::from_str(s).unwrap())
+                                v.map::<String, _>(|s| #mapper)
                                     .collect()
                             })
                             .unwrap_or_else(Vec::new);
@@ -851,7 +886,7 @@ impl ClapField {
                     if arg_matches.is_present(&____name) {
                         *#ident = arg_matches
                             .value_of(&____name)
-                            .map(|s| ::std::str::FromStr::from_str(s).unwrap())
+                            .map(|s| #mapper)
                             #required;
                     }
                 }

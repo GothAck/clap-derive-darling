@@ -1,5 +1,5 @@
 use clap::App;
-use clap_derive_darling::{Args, Clap, Parser, Subcommand};
+use clap_derive_darling::{ArgEnum, Args, Clap, Parser, Subcommand};
 
 #[derive(Parser)]
 /// Application description
@@ -187,4 +187,44 @@ fn test_subcommand() {
     // if let Command::External(external) = flags.command {
     //     assert_eq!(external, vec!["--external-arg"]);
     // }
+}
+
+#[test]
+fn test_arg_enum() {
+    #[derive(Parser)]
+    struct Application {
+        #[clap(long, short, arg_enum)]
+        first: First,
+
+        #[clap(long, short, arg_enum)]
+        second: Option<Second>,
+
+        #[clap(long, short, arg_enum)]
+        third: Option<Option<Second>>,
+    }
+
+    #[derive(ArgEnum, Clone)]
+    enum First {
+        #[clap(help = "First variant 0 help")]
+        Variant0,
+        Variant1,
+    }
+
+    #[derive(ArgEnum, Clone)]
+    #[clap(rename_all = "SCREAMING_SNAKE_CASE")]
+    enum Second {
+        Variant0,
+        #[clap(help = "Second variant 1 help")]
+        Variant1,
+    }
+
+    let args = vec!["app_name", "--first", "variant-0", "--second", "VARIANT_1"];
+
+    // FIXME: --third should be able to be added without a value...
+
+    let flags = Application::try_parse_from(args).unwrap();
+
+    assert!(matches!(flags.first, First::Variant0));
+    assert!(matches!(flags.second, Some(Second::Variant1)));
+    assert!(matches!(flags.third, None));
 }

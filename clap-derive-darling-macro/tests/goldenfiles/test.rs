@@ -173,7 +173,6 @@ impl clap_derive_darling::Args for Application {
             clap::Arg::new(___name)
                 .long(___name_long)
                 .takes_value(false)
-                .validator(|s| ::std::str::FromStr::from_str(s).map(|_: bool| ()))
         });
         let app = app.arg({
             let ___name_value = get_cache_str_keyed("name_value", "opt_opt_t", &prefix, || {
@@ -431,7 +430,6 @@ impl clap_derive_darling::Args for Application {
             clap::Arg::new(___name)
                 .long(___name_long)
                 .takes_value(false)
-                .validator(|s| ::std::str::FromStr::from_str(s).map(|_: bool| ()))
         });
         let app = app.arg({
             let ___name_value = get_cache_str_keyed("name_value", "opt_opt_t", &prefix, || {

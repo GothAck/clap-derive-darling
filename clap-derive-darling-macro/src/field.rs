@@ -1,9 +1,9 @@
 use darling::{util::Override, Error, FromField, FromMeta, Result, ToTokens};
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{GenericArgument, Ident, LitStr, Path, PathArguments, Type};
+use syn::{Expr, GenericArgument, Ident, LitStr, Path, PathArguments, Type};
 
-use crate::common::{ClapDocCommon, ClapDocCommonAuto, ClapDocHelpMarker};
+use crate::common::{ClapDocCommon, ClapDocCommonAuto, ClapDocHelpMarker, ClapTokensResult};
 
 use super::RenameAll;
 
@@ -73,43 +73,68 @@ pub(crate) enum ClapFieldParse {
     FromFlag(Override<LitStr>),
 }
 
-impl ToTokens for ClapFieldParse {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
+impl ClapFieldParse {
+    pub fn defaulted(&self) -> Result<Self> {
+        use ClapFieldParse::*;
+        use Override::{Explicit, Inherit};
+
+        Ok(match self {
+            FromStr(Inherit) => FromStr(Explicit(LitStr::new(
+                "::std::convert::From::from",
+                Span::call_site(),
+            ))),
+            TryFromStr(Inherit) => TryFromStr(Explicit(LitStr::new(
+                "::std::str::FromStr::from_str",
+                Span::call_site(),
+            ))),
+            FromOsStr(Inherit) => FromOsStr(Explicit(LitStr::new(
+                "::std::convert::From::from",
+                Span::call_site(),
+            ))),
+            TryFromOsStr(Inherit) => {
+                return Err(Error::unknown_value("No default for try_from_os_str"))
+            }
+            FromOccurrences(Inherit) => {
+                FromOccurrences(Explicit(LitStr::new("value as T", Span::call_site())))
+            }
+            FromFlag(Inherit) => FromFlag(Explicit(LitStr::new(
+                "::std::convert::From::from",
+                Span::call_site(),
+            ))),
+
+            FromStr(Explicit(..)) => self.clone(),
+            TryFromStr(Explicit(..)) => self.clone(),
+            FromOsStr(Explicit(..)) => self.clone(),
+            TryFromOsStr(Explicit(..)) => self.clone(),
+            FromOccurrences(Explicit(..)) => self.clone(),
+            FromFlag(Explicit(..)) => self.clone(),
+        })
+    }
+    pub fn parse(&self) -> Result<Expr> {
         use ClapFieldParse::*;
 
-        match self {
-            FromStr(Override::Explicit(exp)) => {
-                tokens.extend(quote! {
-                    #exp
-                });
-            }
-            TryFromStr(Override::Explicit(exp)) => {
-                tokens.extend(quote! {
-                    #exp
-                });
-            }
-            FromOsStr(Override::Explicit(exp)) => {
-                tokens.extend(quote! {
-                    #exp
-                });
-            }
-            TryFromOsStr(Override::Explicit(exp)) => {
-                tokens.extend(quote! {
-                    #exp
-                });
-            }
-            FromOccurrences(Override::Explicit(exp)) => {
-                tokens.extend(quote! {
-                    #exp
-                });
-            }
-            FromFlag(Override::Explicit(exp)) => {
-                tokens.extend(quote! {
-                    #exp
-                });
-            }
-            _ => {}
-        }
+        Ok(match self {
+            FromStr(Override::Explicit(exp)) => exp.parse()?,
+            TryFromStr(Override::Explicit(exp)) => exp.parse()?,
+            FromOsStr(Override::Explicit(exp)) => exp.parse()?,
+            TryFromOsStr(Override::Explicit(exp)) => exp.parse()?,
+            FromOccurrences(Override::Explicit(exp)) => exp.parse()?,
+            FromFlag(Override::Explicit(exp)) => exp.parse()?,
+            _ => return Err(Error::unknown_value("Parse should have been defaulted...")),
+        })
+    }
+}
+
+impl Default for ClapFieldParse {
+    fn default() -> Self {
+        Self::TryFromStr(Override::Inherit)
+    }
+}
+
+impl ClapTokensResult for ClapFieldParse {
+    fn to_tokens_result(&self) -> Result<TokenStream> {
+        let parsed = self.parse()?;
+        Ok(quote!(#parsed))
     }
 }
 
@@ -286,55 +311,19 @@ impl ClapField {
         (prefixes, ty)
     }
 
-    fn get_parse(&self) -> Result<ClapFieldParse> {
-        use ClapFieldParse::*;
-
+    fn get_parse_defaulted(&self) -> Result<ClapFieldParse> {
         let (arg_type, _) = self.get_arg_type()?;
 
-        Ok(if let Some(parse) = &self.parse {
+        let parse = if let Some(parse) = &self.parse {
             parse.clone()
         } else if matches!(arg_type, ClapArgType::Bool) {
-            FromFlag(Override::Inherit)
+            ClapFieldParse::FromFlag(Override::Inherit)
         } else {
-            TryFromStr(Override::Inherit)
-        })
+            ClapFieldParse::default()
+        };
+
+        parse.defaulted()
     }
-
-    // fn get_parse_defaulted(&self) -> ClapFieldParse {
-    //     use ClapFieldParse::*;
-
-    //     let parse = self.get_parse();
-
-    //     match &parse {
-    //         FromStr(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
-    //             "::std::convert::From::from",
-    //             Span::call_site(),
-    //         ))),
-    //         FromStr(Override::Explicit(..)) => parse,
-    //         TryFromStr(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
-    //             "::std::str::FromStr::from_str",
-    //             Span::call_site(),
-    //         ))),
-    //         TryFromStr(Override::Explicit(..)) => parse,
-    //         FromOsStr(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
-    //             "::std::convert::From::from",
-    //             Span::call_site(),
-    //         ))),
-    //         FromOsStr(Override::Explicit(..)) => parse,
-    //         TryFromOsStr(Override::Inherit) => FromStr(Override::Inherit),
-    //         TryFromOsStr(Override::Explicit(..)) => parse,
-    //         FromOccurrences(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
-    //             "value as T",
-    //             Span::call_site(),
-    //         ))),
-    //         FromOccurrences(Override::Explicit(..)) => parse,
-    //         FromFlag(Override::Inherit) => FromStr(Override::Explicit(LitStr::new(
-    //             "::std::convert::From::from",
-    //             Span::call_site(),
-    //         ))),
-    //         FromFlag(Override::Explicit(..)) => parse,
-    //     }
-    // }
 
     fn get_flatten(&self) -> (TokenStream, Option<TokenStream>) {
         if let Some(flatten) = &self.flatten {
@@ -395,6 +384,8 @@ impl ClapField {
             }
         } else {
             let name = self.get_name();
+            let parse = self.get_parse_defaulted()?;
+            let parse_expr = parse.parse()?;
             let name_renamed =
                 self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
 
@@ -479,7 +470,7 @@ impl ClapField {
                 None => builder,
             };
 
-            let builder = match self.get_parse()? {
+            let builder = match &parse {
                 ClapFieldParse::FromFlag(..) => {
                     quote! {
                         #builder
@@ -547,10 +538,12 @@ impl ClapField {
                                 .filter_map(clap_derive_darling::ArgEnum::to_possible_value),
                         )
                 }
+            } else if matches!(arg_type, ClapArgType::Bool) {
+                builder
             } else {
                 quote! {
                     #builder
-                        .validator(|s| ::std::str::FromStr::from_str(s).map(|_: #stripped_type_path| ()))
+                        .validator(|s| #parse_expr(s).map(|_: #stripped_type_path| ()))
                 }
             };
 
@@ -670,6 +663,9 @@ impl ClapField {
         } else {
             let name = self.get_name();
 
+            let parse = self.get_parse_defaulted()?;
+            let parse_expr = parse.parse()?;
+
             let name_ident = format_ident!("___name");
 
             let field_name_renamed =
@@ -685,7 +681,7 @@ impl ClapField {
                 }
             } else {
                 quote! {
-                    ::std::str::FromStr::from_str(s).map_err(|err| {
+                    #parse_expr(s).map_err(|err| {
                         clap::Error::raw(
                             clap::ErrorKind::ValueValidation,
                             format!("Invalid value for {}: {}", &#name_ident, &err)
@@ -793,3 +789,6 @@ impl ClapDocCommon for ClapField {
 impl ClapDocCommonAuto for ClapField {
     type Marker = ClapDocHelpMarker;
 }
+
+#[cfg(test)]
+mod test;

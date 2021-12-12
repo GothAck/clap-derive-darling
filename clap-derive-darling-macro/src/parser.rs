@@ -3,7 +3,7 @@ use std::vec;
 use darling::{
     ast,
     util::{Ignored, Override},
-    FromDeriveInput, ToTokens,
+    FromDeriveInput, Result,
 };
 use quote::quote;
 use syn::Ident;
@@ -11,7 +11,7 @@ use syn::Ident;
 use crate::{
     common::{
         ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapParserArgsCommon, ClapRename, ClapTraitImpls,
+        ClapParserArgsCommon, ClapRename, ClapTokensResult, ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
@@ -48,23 +48,17 @@ pub(crate) struct ClapParser {
     rename_all_value: RenameAll,
 }
 
-impl ToTokens for ClapParser {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        tokens.extend(self.to_tokens_args());
-    }
-}
-
-impl ClapParser {
-    fn to_tokens_args(&self) -> proc_macro2::TokenStream {
+impl ClapTokensResult for ClapParser {
+    fn to_tokens_result(&self) -> Result<proc_macro2::TokenStream> {
         let impl_args = self.to_tokens_impl_args();
         let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches();
         let impl_into_app = self.to_tokens_impl_into_app();
 
-        quote! {
+        Ok(quote! {
             #impl_args
             #impl_from_arg_matches
             #impl_into_app
-        }
+        })
     }
 }
 

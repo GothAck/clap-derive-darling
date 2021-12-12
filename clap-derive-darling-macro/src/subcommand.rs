@@ -1,13 +1,13 @@
 use std::vec;
 
-use darling::{ast, util::Override, FromDeriveInput, FromVariant, ToTokens};
+use darling::{ast, util::Override, FromDeriveInput, FromVariant, Result};
 use quote::quote;
 use syn::Ident;
 
 use crate::{
     common::{
         ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapParserArgsCommon, ClapRename, ClapTraitImpls,
+        ClapParserArgsCommon, ClapRename, ClapTokensResult, ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
@@ -20,10 +20,15 @@ pub struct ClapSubcommand {
     data: ast::Data<ClapSubcommandVariant, ()>,
 }
 
-impl ToTokens for ClapSubcommand {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        tokens.extend(self.to_tokens_impl_from_arg_matches());
-        tokens.extend(self.to_tokens_impl_subcommand());
+impl ClapTokensResult for ClapSubcommand {
+    fn to_tokens_result(&self) -> Result<proc_macro2::TokenStream> {
+        let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches();
+        let impl_subcommand = self.to_tokens_impl_subcommand();
+
+        Ok(quote! {
+            #impl_from_arg_matches
+            #impl_subcommand
+        })
     }
 }
 

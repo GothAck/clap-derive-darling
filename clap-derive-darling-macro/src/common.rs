@@ -1,9 +1,24 @@
-use darling::util::Override;
+use darling::{util::Override, Result};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{AttrStyle, Attribute, LitStr};
 
 use crate::{field::ClapField, RenameAll};
+
+pub(crate) trait ClapTokensResult {
+    fn to_tokens_result(&self) -> Result<TokenStream>;
+}
+
+pub(crate) trait ClapTokensResultAuto: ClapTokensResult {
+    fn to_tokens(&self) -> TokenStream {
+        match self.to_tokens_result() {
+            Ok(tokens) => tokens,
+            Err(error) => error.write_errors(),
+        }
+    }
+}
+
+impl<T: ClapTokensResult> ClapTokensResultAuto for T {}
 
 pub(crate) trait ClapFields {
     fn get_fields(&self) -> Vec<&ClapField>;

@@ -1,11 +1,11 @@
 use std::vec;
 
-use darling::{ast, util::Override, FromDeriveInput, FromVariant, ToTokens};
+use darling::{ast, util::Override, FromDeriveInput, FromVariant, Result};
 use quote::quote;
 use syn::Ident;
 
 use crate::{
-    common::{ClapParserArgsCommon, ClapRename},
+    common::{ClapParserArgsCommon, ClapRename, ClapTokensResult},
     RenameAll,
 };
 
@@ -19,9 +19,13 @@ pub struct ClapArgEnum {
     rename_all: RenameAll,
 }
 
-impl ToTokens for ClapArgEnum {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        tokens.extend(self.to_tokens_impl_arg_enum().unwrap());
+impl ClapTokensResult for ClapArgEnum {
+    fn to_tokens_result(&self) -> Result<proc_macro2::TokenStream> {
+        let impl_arg_enum = self.to_tokens_impl_arg_enum()?;
+
+        Ok(quote! {
+            #impl_arg_enum
+        })
     }
 }
 
@@ -110,12 +114,14 @@ pub struct ClapArgEnumVariant {
 }
 
 impl ClapArgEnumVariant {
+    fn get_parent_ident(&self) -> darling::Result<&Ident> {
+        self.parent_ident
+            .as_ref()
+            .ok_or_else(|| darling::Error::custom("Missing parent_ident").with_span(&self.ident))
+    }
     fn to_tokens_match_to_possible_value(&self) -> darling::Result<proc_macro2::TokenStream> {
         let ident = &self.ident;
-        let parent_ident = self
-            .parent_ident
-            .as_ref()
-            .ok_or_else(|| darling::Error::custom("Missing parent_ident").with_span(&ident))?;
+        let parent_ident = self.get_parent_ident()?;
 
         if !self.fields.is_unit() {
             return Err(darling::Error::custom(format!(

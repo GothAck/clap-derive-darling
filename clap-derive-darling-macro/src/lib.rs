@@ -23,14 +23,14 @@ use args::ClapArgs;
 use parser::ClapParser;
 use subcommand::ClapSubcommand;
 
+use common::ClapTokensResultAuto;
+
 #[proc_macro_derive(Parser, attributes(clap, doc))]
 pub fn derive_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let conf_struct = ClapParser::from_derive_input(&input).expect("Wrong options");
 
-    let tokens = quote! { #conf_struct };
-
-    tokens.into()
+    conf_struct.to_tokens().into()
 }
 
 #[proc_macro_derive(Args, attributes(clap, doc))]
@@ -38,9 +38,7 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let conf_struct = ClapArgs::from_derive_input(&input).expect("Wrong options");
 
-    let tokens = quote! { #conf_struct };
-
-    tokens.into()
+    conf_struct.to_tokens().into()
 }
 
 #[proc_macro_derive(Subcommand, attributes(clap))]
@@ -48,9 +46,7 @@ pub fn derive_subcommand(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let conf_struct = ClapSubcommand::from_derive_input(&input).expect("Wrong options");
 
-    let tokens = quote! { #conf_struct };
-
-    tokens.into()
+    conf_struct.to_tokens().into()
 }
 
 #[proc_macro_derive(ArgEnum, attributes(clap))]
@@ -58,9 +54,7 @@ pub fn derive_arg_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let conf_struct = ClapArgEnum::from_derive_input(&input).expect("Wrong options");
 
-    let tokens = quote! { #conf_struct };
-
-    tokens.into()
+    conf_struct.to_tokens().into()
 }
 
 #[derive(Debug, Clone, Copy, FromMeta)]

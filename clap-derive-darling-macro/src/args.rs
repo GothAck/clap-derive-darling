@@ -52,8 +52,8 @@ pub(crate) struct ClapArgs {
 
 impl ClapTokensResult for ClapArgs {
     fn to_tokens_result(&self) -> Result<proc_macro2::TokenStream> {
-        let impl_args = self.to_tokens_impl_args();
-        let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches();
+        let impl_args = self.to_tokens_impl_args()?;
+        let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches()?;
 
         Ok(quote! {
             #impl_args

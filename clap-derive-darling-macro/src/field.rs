@@ -1,10 +1,21 @@
-use darling::{util::Override, FromField, FromMeta, ToTokens};
+use darling::{util::Override, Error, FromField, FromMeta, Result, ToTokens};
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{GenericArgument, Ident, LitStr, PathArguments, Type};
+use syn::{GenericArgument, Ident, LitStr, Path, PathArguments, Type};
 
 use crate::common::{ClapDocCommon, ClapDocCommonAuto, ClapDocHelpMarker};
 
 use super::RenameAll;
+
+enum ClapArgType {
+    Bool,
+    OptionT,
+    OptionOptionT,
+    T,
+    VecT,
+    OptionVecT,
+}
+
 #[derive(Debug, Clone, FromField)]
 #[darling(attributes(clap), forward_attrs(doc))]
 pub(crate) struct ClapField {
@@ -39,7 +50,7 @@ pub(crate) struct ClapField {
     #[darling(default)]
     pub arg_enum: bool,
     #[darling(default)]
-    pub skip: Option<Override<String>>,
+    pub skip: Option<Override<Path>>,
     #[darling(default)]
     pub default_value: Option<String>,
 
@@ -63,7 +74,7 @@ pub(crate) enum ClapFieldParse {
 }
 
 impl ToTokens for ClapFieldParse {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
         use ClapFieldParse::*;
 
         match self {
@@ -120,19 +131,6 @@ impl ClapField {
         }
     }
 
-    fn get_type_new_strip_option(&self, input: &OptionSynPath, level: usize) -> OptionSynPath {
-        self.get_type_new_strip_types_impl(
-            input,
-            &[
-                quote!(std::option::Option),
-                quote!(core::option::Option),
-                quote!(option::Option),
-                quote!(Option),
-            ],
-            level,
-        )
-    }
-
     fn get_type_new_strip_vec_option(&self, input: &OptionSynPath, level: usize) -> OptionSynPath {
         self.get_type_new_strip_types_impl(
             input,
@@ -153,7 +151,7 @@ impl ClapField {
     fn get_type_new_strip_types_impl(
         &self,
         input: &OptionSynPath,
-        types: &[proc_macro2::TokenStream],
+        types: &[TokenStream],
         level: usize,
     ) -> OptionSynPath {
         if level == 0 {
@@ -206,7 +204,7 @@ impl ClapField {
     fn types_without_generics_eq(
         &self,
         input: &OptionSynPath,
-        types: &[proc_macro2::TokenStream],
+        types: &[TokenStream],
     ) -> OptionSynPath {
         if let Some(type_path) = input {
             let type_path_no_generic = type_path
@@ -224,7 +222,7 @@ impl ClapField {
         }
     }
 
-    fn types_eq(&self, input: &OptionSynPath, types: &[proc_macro2::TokenStream]) -> OptionSynPath {
+    fn types_eq(&self, input: &OptionSynPath, types: &[TokenStream]) -> OptionSynPath {
         if let Some(type_path) = input {
             let type_path_str = type_path.to_token_stream().to_string();
 
@@ -240,43 +238,66 @@ impl ClapField {
         }
     }
 
-    // fn get_vec_option_prefixes(&self) -> (Vec<&'static str>, OptionSynPath) {
-    //     let mut prefixes = Vec::new();
-    //     let mut ty = self.get_type_path();
+    fn get_arg_type(&self) -> Result<(ClapArgType, OptionSynPath)> {
+        if self.ty.to_token_stream().to_string() == "bool" {
+            return Ok((ClapArgType::Bool, self.get_type_path()));
+        }
 
-    //     for _ in 0..100 {
-    //         let mut set = false;
-    //         if self.types_without_generics_eq_vec(&ty).is_some() {
-    //             prefixes.push("Vec");
-    //             set = true;
-    //         } else if self.types_without_generics_eq_option(&ty).is_some() {
-    //             prefixes.push("Option");
-    //             set = true;
-    //         }
-    //         if set {
-    //             ty = self.get_type_new_strip_vec_option(&ty, 1);
-    //         } else {
-    //             break;
-    //         }
-    //     }
+        let (prefixes, stripped_type_path) = self.get_vec_option_prefixes();
 
-    //     (prefixes, ty)
-    // }
+        if prefixes.is_empty() {
+            Ok((ClapArgType::T, stripped_type_path))
+        } else if prefixes == ["Option"] {
+            Ok((ClapArgType::OptionT, stripped_type_path))
+        } else if prefixes == ["Option", "Option"] {
+            Ok((ClapArgType::OptionOptionT, stripped_type_path))
+        } else if prefixes == ["Vec"] {
+            Ok((ClapArgType::VecT, stripped_type_path))
+        } else if prefixes == ["Option", "Vec"] {
+            Ok((ClapArgType::OptionVecT, stripped_type_path))
+        } else {
+            Err(
+                Error::custom(format!("Type {:?} does not conform to standards", &self.ty))
+                    .with_span(&self.ty),
+            )
+        }
+    }
 
-    fn get_parse(&self) -> ClapFieldParse {
+    fn get_vec_option_prefixes(&self) -> (Vec<&'static str>, OptionSynPath) {
+        let mut prefixes = Vec::new();
+        let mut ty = self.get_type_path();
+
+        for _ in 0..100 {
+            let mut set = false;
+            if self.types_without_generics_eq_vec(&ty).is_some() {
+                prefixes.push("Vec");
+                set = true;
+            } else if self.types_without_generics_eq_option(&ty).is_some() {
+                prefixes.push("Option");
+                set = true;
+            }
+            if set {
+                ty = self.get_type_new_strip_vec_option(&ty, 1);
+            } else {
+                break;
+            }
+        }
+
+        (prefixes, ty)
+    }
+
+    fn get_parse(&self) -> Result<ClapFieldParse> {
         use ClapFieldParse::*;
 
-        if let Some(parse) = &self.parse {
+        let (arg_type, _) = self.get_arg_type()?;
+
+        Ok(if let Some(parse) = &self.parse {
             parse.clone()
-        } else if let Some(ty_path) = self.get_type_path() {
-            if ty_path.len() == 1 && ty_path[0].ident == "bool" {
-                FromFlag(Override::Inherit)
-            } else {
-                TryFromStr(Override::Inherit)
-            }
+        } else if matches!(arg_type, ClapArgType::Bool) {
+            FromFlag(Override::Inherit)
         } else {
             TryFromStr(Override::Inherit)
-        }
+        })
     }
 
     // fn get_parse_defaulted(&self) -> ClapFieldParse {
@@ -315,81 +336,7 @@ impl ClapField {
     //     }
     // }
 
-    fn get_takes_value(&self) -> proc_macro2::TokenStream {
-        if matches!(self.get_parse(), ClapFieldParse::FromFlag(..)) {
-            quote! { .takes_value(false) }
-        } else {
-            quote! { .takes_value(true) }
-        }
-    }
-
-    fn is_required(&self) -> bool {
-        if self.default_value.is_some() || matches!(self.get_parse(), ClapFieldParse::FromFlag(..))
-        {
-            return false;
-        }
-
-        let type_path = self.get_type_path();
-        if self.types_without_generics_eq_option(&type_path).is_some()
-            || self.types_without_generics_eq_vec(&type_path).is_some()
-        {
-            return false;
-        }
-
-        true
-    }
-
-    fn get_required(&self) -> Option<proc_macro2::TokenStream> {
-        if self.is_required() {
-            Some(quote! { .required(true) })
-        } else {
-            None
-        }
-    }
-
-    fn get_short(&self) -> Option<proc_macro2::TokenStream> {
-        let name = self.get_name().chars().next().unwrap();
-
-        match &self.short {
-            Some(Override::Explicit(short)) => Some(quote! { .short(#short) }),
-            Some(Override::Inherit) => Some(quote! { .short(#name) }),
-            None => None,
-        }
-    }
-
-    fn get_long(&self) -> Option<proc_macro2::TokenStream> {
-        match &self.long {
-            Some(Override::Explicit(long)) => {
-                Some(self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#long)))
-            }
-            Some(Override::Inherit) => {
-                let name = self.get_name();
-                Some(self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name)))
-            }
-            None => None,
-        }
-    }
-
-    fn get_env(&self) -> Option<proc_macro2::TokenStream> {
-        match &self.env {
-            Some(Override::Explicit(env)) => {
-                let name_rename =
-                    self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#env));
-
-                Some(quote! { .env(&#name_rename) })
-            }
-            Some(Override::Inherit) => {
-                let name = self.get_name();
-                let name_rename =
-                    self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
-
-                Some(quote! { .env(&#name_rename) })
-            }
-            None => None,
-        }
-    }
-
-    fn get_flatten(&self) -> (proc_macro2::TokenStream, Option<proc_macro2::TokenStream>) {
+    fn get_flatten(&self) -> (TokenStream, Option<TokenStream>) {
         if let Some(flatten) = &self.flatten {
             let prefix = match flatten {
                 Override::Explicit(prefix) => Some(quote! { vec.push(#prefix.to_string()); }),
@@ -418,9 +365,14 @@ impl ClapField {
         }
     }
 
-    pub fn to_tokens_augment(&self) -> proc_macro2::TokenStream {
-        if self.subcommand {
+    pub fn to_tokens_augment(&self) -> Result<TokenStream> {
+        let (arg_type, stripped_type_path) = self.get_arg_type()?;
+
+        Ok(if self.subcommand {
             let ty = &self.ty;
+            if !matches!(arg_type, ClapArgType::T) {
+                return Err(Error::unexpected_type(&ty.to_token_stream().to_string()).with_span(ty));
+            }
 
             quote! {
                 let app = <#ty as clap_derive_darling::Subcommand>::augment_subcommands(app, prefix.clone());
@@ -442,464 +394,379 @@ impl ClapField {
                 let app = app.help_heading(old_heading);
             }
         } else {
-            let ty_no_opt_vec = self.get_type_new_strip_vec_option(&self.get_type_path(), 10);
-
             let name = self.get_name();
             let name_renamed =
                 self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
-            let name_renamed_value =
-                self.rename_field(self.rename_all_value, Some(quote!(prefix)), quote!(#name));
 
-            let takes_value = self.get_takes_value();
-            let required = self.get_required();
-            let short = self.get_short();
-            let env = self.get_env();
-            let help = self.to_tokens_app_call_help_about();
+            let name_ident = format_ident!("___name");
+            let name_value_ident = format_ident!("___name_value");
+            let name_long_ident = format_ident!("___name_long");
+            let name_env_ident = format_ident!("___name_env");
 
-            let multiple_values = if self
-                .types_without_generics_eq_vec(&self.get_type_path())
-                .is_some()
-            {
-                Some(quote! {.multiple_values(true)})
-            } else {
-                None
+            let builder = quote! {
+                let #name_ident = get_cache_str_keyed("name", #name, &prefix, || #name_renamed);
+                clap::Arg::new(&*#name_ident)
             };
 
-            let (long_var, long_call) = {
-                if let Some(long) = self.get_long() {
-                    let ident = format_ident!("___name_long");
-                    (
-                        Some(
-                            quote! { let #ident = get_cache_str_keyed("name_long", #name, &prefix, || #long); },
-                        ),
-                        Some(quote! { .long(#ident) }),
-                    )
-                } else {
-                    (None, None)
+            let builder = match &self.short {
+                Some(Override::Explicit(short)) => {
+                    let short = short
+                        .chars()
+                        .next()
+                        .ok_or_else(|| Error::unknown_value(short))?;
+                    quote! {
+                        #builder
+                            .short(#short)
+                    }
+                }
+                Some(Override::Inherit) => {
+                    let short = self.get_name().chars().next().ok_or_else(|| {
+                        Error::custom("Could not build short value from field name")
+                    })?;
+                    quote! {
+                        #builder
+                            .short(#short)
+                    }
+                }
+                None => builder,
+            };
+
+            let builder = match &self.long {
+                Some(Override::Explicit(long)) => {
+                    let long_rename =
+                        self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#long));
+                    quote! {
+                        let #name_long_ident = get_cache_str_keyed("name_long", #name, &prefix, || #long_rename);
+
+                        #builder
+                            .long(#name_long_ident)
+                    }
+                }
+                Some(Override::Inherit) => {
+                    let long_rename =
+                        self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+                    quote! {
+                        let #name_long_ident = get_cache_str_keyed("name_long", #name, &prefix, || #long_rename);
+
+                        #builder
+                            .long(#name_long_ident)
+                    }
+                }
+                None => builder,
+            };
+
+            let builder = match &self.env {
+                Some(Override::Explicit(env)) => {
+                    let env_rename =
+                        self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#env));
+                    quote! {
+                        let #name_env_ident = get_cache_str_keyed("name_env", #name, &prefix, || #env_rename);
+
+                        #builder
+                            .env(#env)
+                    }
+                }
+                Some(Override::Inherit) => {
+                    let env_rename =
+                        self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+                    quote! {
+                        let #name_env_ident = get_cache_str_keyed("name_env", #name, &prefix, || #env_rename);
+
+                        #builder
+                            .env(#name_env_ident)
+                    }
+                }
+                None => builder,
+            };
+
+            let builder = match self.get_parse()? {
+                ClapFieldParse::FromFlag(..) => {
+                    quote! {
+                        #builder
+                            .takes_value(false)
+                    }
+                }
+                _ => {
+                    let value_rename = self.rename_field(
+                        self.rename_all_value,
+                        Some(quote!(prefix)),
+                        quote!(#name),
+                    );
+
+                    quote! {
+                        let #name_value_ident = get_cache_str_keyed("name_value", #name, &prefix, || #value_rename);
+
+                        #builder
+                            .takes_value(true)
+                            .value_name(#name_value_ident)
+                    }
                 }
             };
 
-            let value_name = if matches!(self.get_parse(), ClapFieldParse::FromFlag(..)) {
-                None
-            } else {
-                Some(quote! { .value_name(&___name_value) })
+            let builder = match arg_type {
+                ClapArgType::Bool => builder,
+                ClapArgType::OptionT => quote! {
+                    #builder
+                        .required(false)
+                },
+                ClapArgType::OptionOptionT => quote! {
+                    #builder
+                        .required(false)
+                        .min_values(0)
+                        .max_values(1)
+                },
+                ClapArgType::T => {
+                    let default = self.default_value.is_none();
+                    quote! {
+                        #builder
+                            .required(#default)
+                    }
+                }
+                ClapArgType::VecT | ClapArgType::OptionVecT => quote! {
+                    #builder
+                        .required(false)
+                        .multiple_occurrences(true)
+                },
             };
 
-            let validator = if self.arg_enum {
+            let builder = if let Some(help) = self.to_tokens_app_call_help_about() {
                 quote! {
-                    .possible_values(
-                        <#ty_no_opt_vec as clap_derive_darling::ArgEnum>::value_variants()
-                            .iter()
-                            .filter_map(clap_derive_darling::ArgEnum::to_possible_value),
-                    )
+                    #builder
+                        #help
+                }
+            } else {
+                builder
+            };
+
+            let builder = if self.arg_enum {
+                quote! {
+                    #builder
+                        .possible_values(
+                            <#stripped_type_path as clap_derive_darling::ArgEnum>::value_variants()
+                                .iter()
+                                .filter_map(clap_derive_darling::ArgEnum::to_possible_value),
+                        )
                 }
             } else {
                 quote! {
-                    .validator(|s| ::std::str::FromStr::from_str(s).map(|_: #ty_no_opt_vec| ()))
+                    #builder
+                        .validator(|s| ::std::str::FromStr::from_str(s).map(|_: #stripped_type_path| ()))
                 }
             };
 
             quote! {
-                let ___name = get_cache_str_keyed("name", #name, &prefix, || #name_renamed );
-                let ___name_value = get_cache_str_keyed("name_value", #name, &prefix, || #name_renamed_value );
-                #long_var
-
-                let app = app.arg(
-                    clap::Arg::new(&*___name)
-                        #help
-                        #takes_value
-                        #multiple_values
-                        #value_name
-                        #validator
-                        #required
-                        #short
-                        #long_call
-                        #env
-                );
+                let app = app.arg({
+                    #builder
+                });
             }
-        }
+        })
     }
 
-    pub fn to_tokens_augment_for_update(&self) -> proc_macro2::TokenStream {
+    pub fn to_tokens_augment_for_update(&self) -> Result<TokenStream> {
         self.to_tokens_augment()
     }
 
-    pub fn to_tokens_from_arg_matches(&self) -> proc_macro2::TokenStream {
+    pub fn to_tokens_from_arg_matches(&self) -> Result<TokenStream> {
         let ident = &self.ident;
-        let type_path = self.get_type_path();
 
-        let name = self.get_name();
-        let field_name_renamed =
-            self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+        let parse = self.to_tokens_parse(None)?;
 
-        let mapper = if self.arg_enum {
-            let ty_without_vec_option = self.get_type_new_strip_vec_option(&type_path, 10);
+        Ok(quote! {
+            #ident: #parse,
+        })
+    }
+
+    pub fn to_tokens_update_from_arg_matches(&self) -> Result<TokenStream> {
+        let ident = &self.ident;
+
+        let parse = self.to_tokens_parse(ident.clone())?;
+
+        Ok(if self.subcommand || self.flatten.is_some() {
             quote! {
-                <#ty_without_vec_option as clap_derive_darling::ArgEnum>::from_str(s, false).unwrap()
+                {
+                    #[allow(non_snake_case)]
+                    let #ident = &mut self.#ident;
+
+                    #parse;
+                }
             }
         } else {
             quote! {
-                ::std::str::FromStr::from_str(s).unwrap()
-            }
-        };
+                {
+                    #[allow(non_snake_case)]
+                    let #ident = &mut self.#ident;
 
-        if self.subcommand {
-            let ty = &self.ty;
-
-            quote! {
-                #ident: { <#ty as clap_derive_darling::FromArgMatches>::from_arg_matches(arg_matches, prefix.clone())? },
+                    *#ident = #parse;
+                }
             }
-        } else if self.skip.is_some() {
+        })
+    }
+
+    pub fn to_tokens_update_from_arg_matches_raw(&self) -> Result<TokenStream> {
+        let ident = &self.ident;
+
+        let parse = self.to_tokens_parse(ident.clone())?;
+
+        Ok(if self.subcommand || self.flatten.is_some() {
+            parse
+        } else {
             quote! {
-                #ident: std::default::Default::default(),
+                *#ident = #parse;
+            }
+        })
+    }
+
+    fn to_tokens_parse(&self, update_ident: Option<Ident>) -> Result<TokenStream> {
+        let ty = &self.ty;
+        let (arg_type, stripped_type_path) = self.get_arg_type()?;
+
+        Ok(if self.subcommand {
+            if !matches!(arg_type, ClapArgType::T) {
+                return Err(Error::unexpected_type(&ty.to_token_stream().to_string()).with_span(ty));
+            }
+
+            if let Some(update_ident) = update_ident {
+                quote! {
+                    <#ty as clap_derive_darling::FromArgMatches>::update_from_arg_matches(
+                        #update_ident,
+                        arg_matches,
+                        prefix
+                    )
+                }
+            } else {
+                quote! {
+                    <#ty as clap_derive_darling::FromArgMatches>::from_arg_matches(arg_matches, prefix.clone())?
+                }
+            }
+        } else if let Some(skip) = self.skip.as_ref() {
+            match skip {
+                Override::Explicit(default) => quote! { #default },
+                Override::Inherit => quote! { std::default::Default::default() },
             }
         } else if self.flatten.is_some() {
             let (prefix_ident, subprefix) = self.get_flatten();
 
-            quote! {
-                #ident: {
-                    #subprefix
-
-                    clap_derive_darling::FromArgMatches::from_arg_matches(arg_matches, #prefix_ident).unwrap()
-                },
-            }
-        } else if self
-            .types_without_generics_eq(&type_path, &[quote!(bool)])
-            .is_some()
-        {
-            quote! {
-                #ident: arg_matches.is_present(&#field_name_renamed),
-            }
-        } else if self.types_without_generics_eq_option(&type_path).is_some() {
-            let next_type_path = self.get_type_new_strip_option(&type_path, 1);
-
-            if self
-                .types_without_generics_eq_vec(&next_type_path)
-                .is_some()
-            {
+            if let Some(update_ident) = update_ident {
                 quote! {
-                    #ident: if arg_matches.is_present(&#field_name_renamed) {
-                        Some(arg_matches
-                            .values_of(&#field_name_renamed)
-                            .map(|v| {
-                                v.map::<String, _>(|s| #mapper)
-                                    .collect()
-                            })
-                            .unwrap_or_else(Vec::new))
-                    } else {
-                        None
-                    },
-                }
-            } else if self
-                .types_without_generics_eq_option(&next_type_path)
-                .is_some()
-            {
-                quote! {
-                    #ident: if arg_matches.is_present(&#field_name_renamed) {
-                        Some(arg_matches
-                            .value_of(&#field_name_renamed)
-                            .map(|s| #mapper))
-                    } else {
-                        None
-                    },
+                    {
+                        #subprefix
+
+                        clap_derive_darling::FromArgMatches::update_from_arg_matches(
+                            #update_ident,
+                            arg_matches,
+                            #prefix_ident
+                        )
+                    }
                 }
             } else {
                 quote! {
-                    #ident: if arg_matches.is_present(&#field_name_renamed) {
-                        Some(arg_matches
-                            .value_of(&#field_name_renamed)
-                            .map(|s| #mapper)
-                            .expect("app should verify arg required"))
-                    } else {
-                        None
-                    },
+                    {
+                        #subprefix
+
+                        clap_derive_darling::FromArgMatches::from_arg_matches(arg_matches, #prefix_ident).unwrap()
+                    }
                 }
             }
-        } else if self.types_without_generics_eq_vec(&type_path).is_some() {
-            quote! {
-                #ident: {
+        } else {
+            let name = self.get_name();
+
+            let name_ident = format_ident!("___name");
+
+            let field_name_renamed =
+                self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+
+            let mapper = if self.arg_enum {
+                quote! {
+                    <#stripped_type_path as clap_derive_darling::ArgEnum>::from_str(s, false)
+                        .map_err(|err| clap::Error::raw(
+                            clap::ErrorKind::ValueValidation,
+                            format!("Invalid value for {}: {}", &#name_ident, &err)
+                        ))
+                }
+            } else {
+                quote! {
+                    ::std::str::FromStr::from_str(s).map_err(|err| {
+                        clap::Error::raw(
+                            clap::ErrorKind::ValueValidation,
+                            format!("Invalid value for {}: {}", &#name_ident, &err)
+                        )
+                    })
+                }
+            };
+
+            let builder = if matches!(arg_type, ClapArgType::Bool) {
+                quote! {
+                    arg_matches.is_present(#name_ident)
+                }
+            } else if matches!(arg_type, ClapArgType::VecT | ClapArgType::OptionVecT) {
+                quote! {
                     arg_matches
-                        .values_of(&#field_name_renamed)
+                        .values_of(&#name_ident)
                         .map(|v| {
-                            v.map::<String, _>(|s| #mapper)
-                                .collect()
+                            v.map(|s| #mapper)
+                            // .collect()
                         })
-                        .unwrap_or_else(Vec::new)
-                },
-            }
-        } else {
-            let expect = if self.is_required() {
-                Some(quote! { .expect("app should verify arg required") })
+                        .map(|v| v.collect::<Result<Vec<_>, _>>())
+                }
             } else {
-                None
-            };
-
-            quote! {
-                #ident: {
+                quote! {
                     arg_matches
-                        .value_of(&#field_name_renamed)
+                        .value_of(&#name_ident)
                         .map(|s| #mapper)
-                        #expect
-                },
-            }
-        }
-    }
-
-    pub fn to_tokens_update_from_arg_matches(&self) -> proc_macro2::TokenStream {
-        let ident = &self.ident;
-        let type_path = self.get_type_path();
-
-        let name = self.get_name();
-        let field_name_renamed =
-            self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
-
-        let update_from_arg_matches_raw = self.to_tokens_update_from_arg_matches_raw();
-
-        if self.subcommand || self.skip.is_some() {
-            quote! {
-                {
-                    #[allow(non_snake_case)]
-                    let #ident = &mut self.#ident;
-
-                    #update_from_arg_matches_raw
+                        .transpose()?
                 }
-            }
-        } else if self.flatten.is_some() {
-            let (_, subprefix) = self.get_flatten();
-
-            quote! {
-                {
-                    #subprefix
-
-                    #[allow(non_snake_case)]
-                    let #ident = &mut self.#ident;
-
-                    #update_from_arg_matches_raw
-                }
-            }
-        } else if self
-            .types_without_generics_eq(&type_path, &[quote!(bool)])
-            .is_some()
-        {
-            quote! {
-                {
-                    #[allow(non_snake_case)]
-                    let #ident = &mut self.#ident;
-
-                    #update_from_arg_matches_raw
-                }
-            }
-        } else if self.types_without_generics_eq_option(&type_path).is_some() {
-            let next_type_path = self.get_type_new_strip_option(&type_path, 1);
-
-            #[allow(clippy::if_same_then_else)]
-            if self
-                .types_without_generics_eq_vec(&next_type_path)
-                .is_some()
-            {
-                // FIXME: ___name is created twice when processing subcommand
-                quote! {
-                    {
-                        let ___name = #field_name_renamed;
-                        if arg_matches.is_present(&___name) {
-                            #[allow(non_snake_case)]
-                            let #ident = &mut self.#ident;
-
-                            #update_from_arg_matches_raw
-                        }
-                    }
-                }
-            } else if self
-                .types_without_generics_eq_option(&next_type_path)
-                .is_some()
-            {
-                quote! {
-                    {
-                        let ___name = #field_name_renamed;
-                        if arg_matches.is_present(&___name) {
-                            #[allow(non_snake_case)]
-                            let #ident = &mut self.#ident;
-
-                            #update_from_arg_matches_raw
-                        }
-                    }
-                }
-            } else {
-                quote! {
-                    {
-                        let ___name = #field_name_renamed;
-                        if arg_matches.is_present(&___name) {
-                            #[allow(non_snake_case)]
-                            let #ident = &mut self.#ident;
-
-                            #update_from_arg_matches_raw
-                        }
-                    }
-                }
-            }
-        } else if self.types_without_generics_eq_vec(&type_path).is_some() {
-            quote! {
-                {
-                    let ___name = #field_name_renamed;
-                    if arg_matches.is_present(&___name) {
-                        #[allow(non_snake_case)]
-                        let #ident = &mut self.#ident;
-
-                        #update_from_arg_matches_raw
-                    }
-                }
-            }
-        } else {
-            quote! {
-                {
-                    let ____name = #field_name_renamed;
-                    if arg_matches.is_present(&____name) {
-                        #[allow(non_snake_case)]
-                        let #ident = &mut self.#ident;
-
-                        #update_from_arg_matches_raw
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn to_tokens_update_from_arg_matches_raw(&self) -> proc_macro2::TokenStream {
-        let ident = &self.ident;
-        let type_path = self.get_type_path();
-
-        let name = self.get_name();
-        let field_name_renamed =
-            self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
-
-        let mapper = if self.arg_enum {
-            let ty_without_vec_option = self.get_type_new_strip_vec_option(&type_path, 10);
-            quote! {
-                <#ty_without_vec_option as clap_derive_darling::ArgEnum>::from_str(s, false).unwrap()
-            }
-        } else {
-            quote! {
-                ::std::str::FromStr::from_str(s).unwrap()
-            }
-        };
-
-        if self.subcommand {
-            let ty = &self.ty;
-
-            quote! {
-                <#ty as clap_derive_darling::FromArgMatches>::update_from_arg_matches(
-                    #ident,
-                    arg_matches,
-                    prefix,
-                )?;
-            }
-        } else if self.skip.is_some() {
-            quote! {
-                *#ident = std::default::Default::default();
-            }
-        } else if self.flatten.is_some() {
-            let (prefix_ident, subprefix) = self.get_flatten();
-
-            quote! {
-                #subprefix
-
-                clap_derive_darling::FromArgMatches::update_from_arg_matches(#ident, arg_matches, #prefix_ident)?;
-            }
-        } else if self
-            .types_without_generics_eq(&type_path, &[quote!(bool)])
-            .is_some()
-        {
-            quote! {
-                *#ident = arg_matches.is_present(&#field_name_renamed);
-            }
-        } else if self.types_without_generics_eq_option(&type_path).is_some() {
-            let next_type_path = self.get_type_new_strip_option(&type_path, 1);
-
-            if self
-                .types_without_generics_eq_vec(&next_type_path)
-                .is_some()
-            {
-                quote! {
-                    {
-                        let ___name = #field_name_renamed;
-                        if arg_matches.is_present(&___name) {
-                            *#ident = Some(arg_matches
-                                .values_of(&___name)
-                                .map(|v| {
-                                    v.map::<String, _>(|s| #mapper)
-                                        .collect()
-                                })
-                                .unwrap_or_else(Vec::new));
-                        }
-                    }
-                }
-            } else if self
-                .types_without_generics_eq_option(&next_type_path)
-                .is_some()
-            {
-                quote! {
-                    {
-                        let ___name = #field_name_renamed;
-                        if arg_matches.is_present(&___name) {
-                            *#ident = Some(arg_matches
-                                .value_of(&___name)
-                                .map(|s| #mapper));
-                        }
-                    }
-                }
-            } else {
-                quote! {
-                    {
-                        let ___name = #field_name_renamed;
-                        if arg_matches.is_present(&___name) {
-                            *#ident = arg_matches
-                                .value_of(&___name)
-                                .map(|s| #mapper);
-                        }
-                    }
-                }
-            }
-        } else if self.types_without_generics_eq_vec(&type_path).is_some() {
-            quote! {
-                {
-                    let ___name = #field_name_renamed;
-                    if arg_matches.is_present(&___name) {
-                        *#ident = arg_matches
-                            .values_of(&___name)
-                            .map(|v| {
-                                v.map::<String, _>(|s| #mapper)
-                                    .collect()
-                            })
-                            .unwrap_or_else(Vec::new);
-                    }
-                }
-            }
-        } else {
-            let required = if self.is_required() {
-                Some(quote! { .expect("App should have already required this") })
-            } else {
-                None
             };
-            quote! {
-                {
-                    let ____name = #field_name_renamed;
-                    if arg_matches.is_present(&____name) {
-                        *#ident = arg_matches
-                            .value_of(&____name)
-                            .map(|s| #mapper)
-                            #required;
+
+            let builder = if matches!(arg_type, ClapArgType::OptionOptionT) {
+                quote! {
+                    if arg_matches.is_present(&#name_ident) {
+                        Some(#builder)
+                    } else {
+                        None
                     }
                 }
+            } else if matches!(
+                arg_type,
+                ClapArgType::OptionOptionT | ClapArgType::OptionVecT
+            ) {
+                quote! {
+                    #builder
+                        .transpose()?
+                }
+            } else if matches!(arg_type, ClapArgType::T) {
+                quote! {
+                    #builder
+                        .ok_or_else(|| {
+                            clap::Error::raw(
+                                clap::ErrorKind::ValueValidation,
+                                format!("Invalid value for {}", &#name_ident)
+                            )
+                        })?
+                }
+            } else if matches!(arg_type, ClapArgType::VecT) {
+                quote! {
+                    #builder
+                        .unwrap_or_else(|| Ok(Vec::new()))?
+                }
+            } else {
+                builder
+            };
+
+            quote! {
+                {
+                    let #name_ident = #field_name_renamed;
+                    #builder
+                }
             }
-        }
+        })
     }
 
     fn rename_field(
         &self,
         rename: RenameAll,
-        prefix: Option<proc_macro2::TokenStream>,
-        name: proc_macro2::TokenStream,
-    ) -> proc_macro2::TokenStream {
+        prefix: Option<TokenStream>,
+        name: TokenStream,
+    ) -> TokenStream {
         if let Some(prefix) = prefix {
             quote! {
                 #rename(clap_derive_darling::rename::prefix(#name, &#prefix))

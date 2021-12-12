@@ -42,28 +42,28 @@ pub(crate) trait ClapFieldStructs: ClapFields {
             .collect()
     }
 
-    fn to_tokens_augment_args_fields(&self) -> Vec<TokenStream> {
+    fn to_tokens_augment_args_fields(&self) -> Result<Vec<TokenStream>> {
         self.get_fieldstructs()
             .iter()
             .map(|f| f.to_tokens_augment())
             .collect()
     }
 
-    fn to_tokens_augment_args_for_update_fields(&self) -> Vec<TokenStream> {
+    fn to_tokens_augment_args_for_update_fields(&self) -> Result<Vec<TokenStream>> {
         self.get_fieldstructs()
             .iter()
             .map(|f| f.to_tokens_augment_for_update())
             .collect()
     }
 
-    fn to_tokens_from_arg_matches_fields(&self) -> Vec<TokenStream> {
+    fn to_tokens_from_arg_matches_fields(&self) -> Result<Vec<TokenStream>> {
         self.get_fieldstructs()
             .iter()
             .map(|f| f.to_tokens_from_arg_matches())
             .collect()
     }
 
-    fn to_tokens_update_from_arg_matches_fields(&self) -> Vec<TokenStream> {
+    fn to_tokens_update_from_arg_matches_fields(&self) -> Result<Vec<TokenStream>> {
         self.get_fieldstructs()
             .iter()
             .map(|f| f.to_tokens_update_from_arg_matches())
@@ -97,7 +97,7 @@ pub(crate) trait ClapTraitImpls:
 {
     fn get_ident(&self) -> &Ident;
 
-    fn to_tokens_impl_args(&self) -> TokenStream {
+    fn to_tokens_impl_args(&self) -> Result<TokenStream> {
         let ident = self.get_ident();
 
         let name_storage = self.to_tokens_name_storage();
@@ -105,10 +105,10 @@ pub(crate) trait ClapTraitImpls:
         let author_and_version = self.to_tokens_author_and_version();
         let app_call_help_about = self.to_tokens_app_call_help_about();
 
-        let augment_args_fields = self.to_tokens_augment_args_fields();
-        let augment_args_for_update_fields = self.to_tokens_augment_args_for_update_fields();
+        let augment_args_fields = self.to_tokens_augment_args_fields()?;
+        let augment_args_for_update_fields = self.to_tokens_augment_args_for_update_fields()?;
 
-        quote! {
+        Ok(quote! {
             impl clap_derive_darling::Args for #ident {
                 fn augment_args(app: clap::App<'_>, prefix: Option<String>) -> clap::App<'_> {
                     #name_storage
@@ -133,16 +133,16 @@ pub(crate) trait ClapTraitImpls:
                         #app_call_help_about
                 }
             }
-        }
+        })
     }
 
-    fn to_tokens_impl_from_arg_matches(&self) -> TokenStream {
+    fn to_tokens_impl_from_arg_matches(&self) -> Result<TokenStream> {
         let ident = self.get_ident();
 
-        let from_arg_matches_fields = self.to_tokens_from_arg_matches_fields();
-        let update_from_arg_matches_fields = self.to_tokens_update_from_arg_matches_fields();
+        let from_arg_matches_fields = self.to_tokens_from_arg_matches_fields()?;
+        let update_from_arg_matches_fields = self.to_tokens_update_from_arg_matches_fields()?;
 
-        quote! {
+        Ok(quote! {
             impl clap_derive_darling::FromArgMatches for #ident {
                 fn from_arg_matches(arg_matches: &clap::ArgMatches, prefix: Option<String>) -> Result<Self, clap::Error> {
                     let v = #ident {
@@ -157,7 +157,7 @@ pub(crate) trait ClapTraitImpls:
                     Ok(())
                 }
             }
-        }
+        })
     }
 
     fn to_tokens_impl_into_app(&self) -> TokenStream {
@@ -253,10 +253,8 @@ pub(crate) trait ClapDocCommon: ClapDocCommonAuto {
     fn get_attrs(&self) -> Vec<Attribute>;
     fn get_help_about(&self) -> Option<String>;
     fn get_long_help_about(&self) -> Option<String>;
-    // fn get_help_ident(&self) -> Ident;
-    // fn get_long_help_ident(&self) -> Ident;
 
-    fn to_tokens_app_call_help_about(&self) -> TokenStream {
+    fn to_tokens_app_call_help_about(&self) -> Option<TokenStream> {
         let help_about = self.get_help_about();
         let long_help_about = self.get_long_help_about();
 
@@ -276,9 +274,13 @@ pub(crate) trait ClapDocCommon: ClapDocCommonAuto {
             }
         });
 
-        quote! {
-            #help_about
-            #long_help_about
+        if help_about.is_some() || long_help_about.is_some() {
+            Some(quote! {
+                #help_about
+                #long_help_about
+            })
+        } else {
+            None
         }
     }
 

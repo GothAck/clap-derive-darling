@@ -1,6 +1,7 @@
 use std::vec;
 
 use darling::{ast, util::Override, FromDeriveInput, FromVariant, Result};
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
@@ -21,9 +22,9 @@ pub struct ClapSubcommand {
 }
 
 impl ClapTokensResult for ClapSubcommand {
-    fn to_tokens_result(&self) -> Result<proc_macro2::TokenStream> {
-        let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches();
-        let impl_subcommand = self.to_tokens_impl_subcommand();
+    fn to_tokens_result(&self) -> Result<TokenStream> {
+        let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches()?;
+        let impl_subcommand = self.to_tokens_impl_subcommand()?;
 
         Ok(quote! {
             #impl_from_arg_matches
@@ -60,22 +61,22 @@ impl ClapSubcommand {
             .collect()
     }
 
-    fn to_tokens_impl_from_arg_matches(&self) -> proc_macro2::TokenStream {
+    fn to_tokens_impl_from_arg_matches(&self) -> Result<TokenStream> {
         let ident = &self.ident;
 
         let from_arg_matches_variants = self
             .get_variants()
             .iter()
             .map(|v| v.to_tokens_from_arg_matches_variant())
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         let update_from_arg_matches_variants = self
             .get_variants()
             .iter()
             .map(|v| v.to_tokens_update_from_arg_matches_variant())
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
-        quote! {
+        Ok(quote! {
             impl clap_derive_darling::FromArgMatches for #ident {
                 fn from_arg_matches(arg_matches: &clap::ArgMatches, prefix: Option<String>) -> Result<Self, clap::Error> {
                     if let Some((clap_name, sub_arg_matches)) = arg_matches.subcommand() {
@@ -102,10 +103,10 @@ impl ClapSubcommand {
                     Ok(())
                 }
             }
-        }
+        })
     }
 
-    fn to_tokens_impl_subcommand(&self) -> proc_macro2::TokenStream {
+    fn to_tokens_impl_subcommand(&self) -> Result<TokenStream> {
         let ident = &self.ident;
 
         let name_storage = self.to_tokens_name_storage();
@@ -114,13 +115,13 @@ impl ClapSubcommand {
             .get_variants()
             .iter()
             .map(|v| v.to_tokents_augment_subcommands_variant())
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         let augment_subcommands_for_update_variants = self
             .get_variants()
             .iter()
             .map(|v| v.to_tokents_augment_subcommands_for_update_variant())
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         let has_subcommands = self
             .get_variants()
@@ -128,7 +129,7 @@ impl ClapSubcommand {
             .map(|v| v.to_tokens_has_subcommand())
             .collect::<Vec<_>>();
 
-        quote! {
+        Ok(quote! {
 
             impl clap_derive_darling::Subcommand for #ident {
                 fn augment_subcommands<'b>(clap_app: clap::App<'b>, prefix: Option<String>) -> clap::App<'b> {
@@ -155,7 +156,7 @@ impl ClapSubcommand {
                     false
                 }
             }
-        }
+        })
     }
 }
 
@@ -199,14 +200,14 @@ pub(crate) struct ClapSubcommandVariant {
 }
 
 impl ClapSubcommandVariant {
-    fn to_tokens_from_arg_matches_variant(&self) -> proc_macro2::TokenStream {
+    fn to_tokens_from_arg_matches_variant(&self) -> Result<TokenStream> {
         let ident = &self.ident;
         let name = self.get_name();
         let parent_ident = &self.parent_ident;
 
         let fields = self.get_fields();
 
-        if self.skip {
+        Ok(if self.skip {
             quote! {}
         } else if self.external_subcommand {
             quote! {
@@ -237,7 +238,7 @@ impl ClapSubcommandVariant {
                 }
             }
         } else if self.fields.is_struct() {
-            let from_arg_matches_fields = self.to_tokens_from_arg_matches_fields();
+            let from_arg_matches_fields = self.to_tokens_from_arg_matches_fields()?;
 
             quote! {
                 if #name == clap_name {
@@ -252,10 +253,10 @@ impl ClapSubcommandVariant {
             unimplemented!("Variant type unit not implemented");
         } else {
             unimplemented!("Unknown variant type")
-        }
+        })
     }
 
-    fn to_tokens_update_from_arg_matches_variant(&self) -> proc_macro2::TokenStream {
+    fn to_tokens_update_from_arg_matches_variant(&self) -> Result<TokenStream> {
         let ident = &self.ident;
         let name = self.get_name();
         let parent_ident = &self.parent_ident;
@@ -271,7 +272,7 @@ impl ClapSubcommandVariant {
             })
             .collect::<Vec<_>>();
 
-        if self.skip {
+        Ok(if self.skip {
             quote! {}
         } else if self.external_subcommand {
             quote! {
@@ -303,7 +304,7 @@ impl ClapSubcommandVariant {
                 .get_fields()
                 .iter()
                 .map(|f| f.to_tokens_update_from_arg_matches_raw())
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
 
             quote! {
                 #parent_ident::#ident { #(#fields_ref_mut)* } if #name == clap_name => {
@@ -319,10 +320,10 @@ impl ClapSubcommandVariant {
             unimplemented!("Variant type unit not implemented");
         } else {
             unimplemented!("Unknown variant type")
-        }
+        })
     }
 
-    fn to_tokents_augment_subcommands_variant(&self) -> proc_macro2::TokenStream {
+    fn to_tokents_augment_subcommands_variant(&self) -> Result<TokenStream> {
         let name = self.get_name();
 
         let author_and_version = self.to_tokens_author_and_version();
@@ -330,7 +331,7 @@ impl ClapSubcommandVariant {
 
         let fields = self.get_fields();
 
-        if self.skip {
+        Ok(if self.skip {
             quote! {}
         } else if self.external_subcommand {
             quote! {
@@ -361,7 +362,7 @@ impl ClapSubcommandVariant {
                 .get_fields()
                 .iter()
                 .map(|f| f.to_tokens_augment())
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
 
             quote! {
                 let clap_app = clap_app.subcommand({
@@ -383,12 +384,12 @@ impl ClapSubcommandVariant {
             unimplemented!("Variant type unit not implemented");
         } else {
             unimplemented!("Unknown variant type")
-        }
+        })
     }
-    fn to_tokents_augment_subcommands_for_update_variant(&self) -> proc_macro2::TokenStream {
+    fn to_tokents_augment_subcommands_for_update_variant(&self) -> Result<TokenStream> {
         self.to_tokents_augment_subcommands_variant()
     }
-    fn to_tokens_has_subcommand(&self) -> proc_macro2::TokenStream {
+    fn to_tokens_has_subcommand(&self) -> TokenStream {
         let name = self.get_name();
 
         if self.skip {

@@ -125,3 +125,6 @@ impl ClapDocCommon for ClapParser {
 impl ClapDocCommonAuto for ClapParser {
     type Marker = ClapDocAboutMarker;
 }
+
+#[cfg(test)]
+mod test;

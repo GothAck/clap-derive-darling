@@ -405,7 +405,7 @@ impl ClapField {
 
             let builder = quote! {
                 let #name_ident = get_cache_str_keyed("name", #name, &prefix, || #name_renamed);
-                clap::Arg::new(&*#name_ident)
+                clap::Arg::new(#name_ident)
             };
 
             let builder = match &self.short {
@@ -433,20 +433,20 @@ impl ClapField {
 
             let builder = match &self.long {
                 Some(Override::Explicit(long)) => {
-                    let long_rename =
+                    let rename =
                         self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#long));
                     quote! {
-                        let #name_long_ident = get_cache_str_keyed("name_long", #name, &prefix, || #long_rename);
+                        let #name_long_ident = get_cache_str_keyed("name_long", #name, &prefix, || #rename);
 
                         #builder
                             .long(#name_long_ident)
                     }
                 }
                 Some(Override::Inherit) => {
-                    let long_rename =
+                    let rename =
                         self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
                     quote! {
-                        let #name_long_ident = get_cache_str_keyed("name_long", #name, &prefix, || #long_rename);
+                        let #name_long_ident = get_cache_str_keyed("name_long", #name, &prefix, || #rename);
 
                         #builder
                             .long(#name_long_ident)
@@ -457,20 +457,20 @@ impl ClapField {
 
             let builder = match &self.env {
                 Some(Override::Explicit(env)) => {
-                    let env_rename =
+                    let renmae =
                         self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#env));
                     quote! {
-                        let #name_env_ident = get_cache_str_keyed("name_env", #name, &prefix, || #env_rename);
+                        let #name_env_ident = get_cache_str_keyed("name_env", #name, &prefix, || #renmae);
 
                         #builder
-                            .env(#env)
+                            .env(#name_env_ident)
                     }
                 }
                 Some(Override::Inherit) => {
-                    let env_rename =
+                    let renmae =
                         self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
                     quote! {
-                        let #name_env_ident = get_cache_str_keyed("name_env", #name, &prefix, || #env_rename);
+                        let #name_env_ident = get_cache_str_keyed("name_env", #name, &prefix, || #renmae);
 
                         #builder
                             .env(#name_env_ident)
@@ -487,14 +487,14 @@ impl ClapField {
                     }
                 }
                 _ => {
-                    let value_rename = self.rename_field(
+                    let rename = self.rename_field(
                         self.rename_all_value,
                         Some(quote!(prefix)),
                         quote!(#name),
                     );
 
                     quote! {
-                        let #name_value_ident = get_cache_str_keyed("name_value", #name, &prefix, || #value_rename);
+                        let #name_value_ident = get_cache_str_keyed("name_value", #name, &prefix, || #rename);
 
                         #builder
                             .takes_value(true)

@@ -13,6 +13,9 @@ mod field;
 mod parser;
 mod subcommand;
 
+#[cfg(test)]
+mod test_util;
+
 use darling::{FromDeriveInput, FromMeta, ToTokens};
 use proc_macro::TokenStream;
 use quote::quote;

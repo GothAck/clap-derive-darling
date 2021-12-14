@@ -3,7 +3,10 @@ use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Expr, GenericArgument, Ident, LitStr, Path, PathArguments, Type};
 
-use crate::common::{ClapDocCommon, ClapDocCommonAuto, ClapDocHelpMarker, ClapTokensResult};
+use crate::common::{
+    ClapDocCommon, ClapDocCommonAuto, ClapDocHelpMarker, ClapFieldParent, ClapIdentName,
+    ClapTokensResult,
+};
 
 use super::RenameAll;
 
@@ -53,6 +56,9 @@ pub(crate) struct ClapField {
     pub skip: Option<Override<Path>>,
     #[darling(default)]
     pub default_value: Option<String>,
+
+    #[darling(skip)]
+    pub parent: Option<Box<dyn ClapFieldParent>>,
 
     #[darling(skip, default = "crate::default_rename_all")]
     pub rename_all: RenameAll,
@@ -142,13 +148,6 @@ type SynPath = syn::punctuated::Punctuated<syn::PathSegment, syn::token::Colon2>
 type OptionSynPath = Option<SynPath>;
 
 impl ClapField {
-    fn get_name(&self) -> String {
-        self.name
-            .clone()
-            .or_else(|| self.ident.as_ref().map(|i| i.to_string()))
-            .expect("Field should have name or ident")
-    }
-
     fn get_type_path(&self) -> OptionSynPath {
         match &self.ty {
             Type::Path(type_path) => Some(type_path.path.segments.clone()),
@@ -383,7 +382,7 @@ impl ClapField {
                 let app = app.help_heading(old_heading);
             }
         } else {
-            let name = self.get_name();
+            let name = self.get_name_or()?;
             let parse = self.get_parse_defaulted()?;
             let parse_expr = parse.parse()?;
             let name_renamed =
@@ -411,7 +410,7 @@ impl ClapField {
                     }
                 }
                 Some(Override::Inherit) => {
-                    let short = self.get_name().chars().next().ok_or_else(|| {
+                    let short = name.chars().next().ok_or_else(|| {
                         Error::custom("Could not build short value from field name")
                     })?;
                     quote! {
@@ -624,7 +623,7 @@ impl ClapField {
                         #update_ident,
                         arg_matches,
                         prefix
-                    )
+                    )?
                 }
             } else {
                 quote! {
@@ -661,7 +660,7 @@ impl ClapField {
                 }
             }
         } else {
-            let name = self.get_name();
+            let name = self.get_name_or()?;
 
             let parse = self.get_parse_defaulted()?;
             let parse_expr = parse.parse()?;
@@ -772,6 +771,20 @@ impl ClapField {
                 #rename(#name)
             }
         }
+    }
+}
+
+impl ClapIdentName for ClapField {
+    fn get_ident(&self) -> Option<Ident> {
+        self.ident.clone()
+    }
+    fn get_parent(&self) -> Option<Option<Box<dyn ClapFieldParent>>> {
+        Some(self.parent.clone())
+    }
+    fn get_name(&self) -> Option<String> {
+        self.name
+            .clone()
+            .or_else(|| self.ident.as_ref().map(|i| i.to_string()))
     }
 }
 

@@ -5,7 +5,7 @@ use quote::quote;
 use syn::Ident;
 
 use crate::{
-    common::{ClapParserArgsCommon, ClapRename, ClapTokensResult},
+    common::{ClapIdentName, ClapParserArgsCommon, ClapRename, ClapTokensResult},
     RenameAll,
 };
 
@@ -132,7 +132,7 @@ impl ClapArgEnumVariant {
         }
 
         let ident = &self.ident;
-        let name = self.get_name();
+        let name = self.get_name_or()?;
         let name_renamed =
             self.to_tokens_rename_all(self.rename_all, None, quote! { #name.to_string() });
         let help = self.help.as_ref().map(|v| quote! { .help(#v) });
@@ -145,8 +145,14 @@ impl ClapArgEnumVariant {
     }
 }
 
-impl ClapRename for ClapArgEnumVariant {
-    fn get_name(&self) -> String {
-        self.ident.to_string()
+impl ClapIdentName for ClapArgEnumVariant {
+    fn get_ident(&self) -> Option<Ident> {
+        Some(self.ident.clone())
+    }
+    fn get_name(&self) -> Option<String> {
+        let ident = &self.ident;
+        Some(quote!(#ident).to_string())
     }
 }
+
+impl ClapRename for ClapArgEnumVariant {}

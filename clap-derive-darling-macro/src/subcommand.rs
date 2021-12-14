@@ -7,8 +7,9 @@ use syn::Ident;
 
 use crate::{
     common::{
-        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapParserArgsCommon, ClapRename, ClapTokensResult, ClapTraitImpls,
+        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldParent, ClapFieldStructs,
+        ClapFields, ClapIdentName, ClapIdentNameContainer, ClapParserArgsCommon, ClapRename,
+        ClapTokensResult, ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
@@ -19,6 +20,15 @@ use crate::{
 pub struct ClapSubcommand {
     ident: Ident,
     data: ast::Data<ClapSubcommandVariant, ()>,
+}
+
+impl ClapIdentName for ClapSubcommand {
+    fn get_ident(&self) -> Option<Ident> {
+        Some(self.ident.clone())
+    }
+    fn get_name(&self) -> Option<String> {
+        None
+    }
 }
 
 impl ClapTokensResult for ClapSubcommand {
@@ -55,7 +65,8 @@ impl ClapSubcommand {
             .cloned()
             .cloned()
             .map(|mut v| {
-                v.parent_ident = Some(self.ident.clone());
+                let container = ClapIdentNameContainer::from(self);
+                v.parent = Some(Box::new(container));
                 v
             })
             .collect()
@@ -127,7 +138,7 @@ impl ClapSubcommand {
             .get_variants()
             .iter()
             .map(|v| v.to_tokens_has_subcommand())
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(quote! {
 
@@ -168,7 +179,7 @@ pub(crate) struct ClapSubcommandVariant {
     attrs: Vec<syn::Attribute>,
 
     #[darling(skip)]
-    parent_ident: Option<Ident>,
+    parent: Option<Box<dyn ClapFieldParent>>,
 
     #[darling(default)]
     name: Option<String>,
@@ -199,11 +210,27 @@ pub(crate) struct ClapSubcommandVariant {
     rename_all_value: RenameAll,
 }
 
+impl ClapIdentName for ClapSubcommandVariant {
+    fn get_ident(&self) -> Option<Ident> {
+        Some(self.ident.clone())
+    }
+    fn get_parent(&self) -> Option<Option<Box<dyn ClapFieldParent>>> {
+        Some(self.parent.clone())
+    }
+    fn get_name(&self) -> Option<String> {
+        Some(self.name.clone().unwrap_or_else(|| {
+            self.ident
+                .to_string()
+                .to_rename_all_case(self.get_rename_all())
+        }))
+    }
+}
+
 impl ClapSubcommandVariant {
     fn to_tokens_from_arg_matches_variant(&self) -> Result<TokenStream> {
         let ident = &self.ident;
-        let name = self.get_name();
-        let parent_ident = &self.parent_ident;
+        let name = self.get_name_or()?;
+        let parent_ident = self.get_parent_or()?.get_ident_or()?;
 
         let fields = self.get_fields();
 
@@ -258,8 +285,8 @@ impl ClapSubcommandVariant {
 
     fn to_tokens_update_from_arg_matches_variant(&self) -> Result<TokenStream> {
         let ident = &self.ident;
-        let name = self.get_name();
-        let parent_ident = &self.parent_ident;
+        let name = self.get_name_or()?;
+        let parent_ident = self.get_parent_or()?.get_ident_or()?;
 
         let fields_ref_mut = self
             .get_fields()
@@ -324,7 +351,7 @@ impl ClapSubcommandVariant {
     }
 
     fn to_tokents_augment_subcommands_variant(&self) -> Result<TokenStream> {
-        let name = self.get_name();
+        let name = self.get_name_or()?;
 
         let author_and_version = self.to_tokens_author_and_version();
         let app_call_help_about = self.to_tokens_app_call_help_about();
@@ -389,10 +416,10 @@ impl ClapSubcommandVariant {
     fn to_tokents_augment_subcommands_for_update_variant(&self) -> Result<TokenStream> {
         self.to_tokents_augment_subcommands_variant()
     }
-    fn to_tokens_has_subcommand(&self) -> TokenStream {
-        let name = self.get_name();
+    fn to_tokens_has_subcommand(&self) -> Result<TokenStream> {
+        let name = self.get_name_or()?;
 
-        if self.skip {
+        Ok(if self.skip {
             quote! {}
         } else {
             quote! {
@@ -403,7 +430,7 @@ impl ClapSubcommandVariant {
                     }
                 }
             }
-        }
+        })
     }
 }
 
@@ -424,20 +451,8 @@ impl ClapFields for ClapSubcommandVariant {
     }
 }
 impl ClapFieldStructs for ClapSubcommandVariant {}
-impl ClapRename for ClapSubcommandVariant {
-    fn get_name(&self) -> String {
-        self.name.clone().unwrap_or_else(|| {
-            self.ident
-                .to_string()
-                .to_rename_all_case(self.get_rename_all())
-        })
-    }
-}
-impl ClapTraitImpls for ClapSubcommandVariant {
-    fn get_ident(&self) -> &Ident {
-        &self.ident
-    }
-}
+impl ClapRename for ClapSubcommandVariant {}
+impl ClapTraitImpls for ClapSubcommandVariant {}
 impl ClapParserArgsCommon for ClapSubcommandVariant {
     fn get_author(&self) -> Option<&Override<String>> {
         self.author.as_ref()

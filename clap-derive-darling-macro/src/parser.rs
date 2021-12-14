@@ -11,13 +11,13 @@ use syn::Ident;
 use crate::{
     common::{
         ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapParserArgsCommon, ClapRename, ClapTokensResult, ClapTraitImpls,
+        ClapIdentName, ClapParserArgsCommon, ClapRename, ClapTokensResult, ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
 };
 
-#[derive(Debug, FromDeriveInput)]
+#[derive(Clone, Debug, FromDeriveInput)]
 #[darling(attributes(clap), forward_attrs(doc), supports(struct_named))]
 pub(crate) struct ClapParser {
     ident: Ident,
@@ -48,11 +48,24 @@ pub(crate) struct ClapParser {
     rename_all_value: RenameAll,
 }
 
+impl ClapIdentName for ClapParser {
+    fn get_ident(&self) -> Option<Ident> {
+        Some(self.ident.clone())
+    }
+    fn get_name(&self) -> Option<String> {
+        Some(self.name.clone().unwrap_or_else(|| {
+            self.ident
+                .to_string()
+                .to_rename_all_case(self.get_rename_all())
+        }))
+    }
+}
+
 impl ClapTokensResult for ClapParser {
     fn to_tokens_result(&self) -> Result<proc_macro2::TokenStream> {
         let impl_args = self.to_tokens_impl_args()?;
         let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches()?;
-        let impl_into_app = self.to_tokens_impl_into_app();
+        let impl_into_app = self.to_tokens_impl_into_app()?;
 
         Ok(quote! {
             #impl_args
@@ -83,20 +96,8 @@ impl ClapFields for ClapParser {
     }
 }
 impl ClapFieldStructs for ClapParser {}
-impl ClapRename for ClapParser {
-    fn get_name(&self) -> String {
-        self.name.clone().unwrap_or_else(|| {
-            self.ident
-                .to_string()
-                .to_rename_all_case(self.get_rename_all())
-        })
-    }
-}
-impl ClapTraitImpls for ClapParser {
-    fn get_ident(&self) -> &Ident {
-        &self.ident
-    }
-}
+impl ClapRename for ClapParser {}
+impl ClapTraitImpls for ClapParser {}
 impl ClapParserArgsCommon for ClapParser {
     fn get_author(&self) -> Option<&Override<String>> {
         self.author.as_ref()

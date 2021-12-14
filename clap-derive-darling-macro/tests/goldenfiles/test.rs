@@ -898,7 +898,7 @@ impl clap_derive_darling::FromArgMatches for Application {
                 command,
                 arg_matches,
                 prefix,
-            );
+            )?;
         }
         Ok(())
     }

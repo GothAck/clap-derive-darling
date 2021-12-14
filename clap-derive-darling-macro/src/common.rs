@@ -1,9 +1,101 @@
-use darling::{util::Override, Result};
+use darling::{util::Override, Error, Result};
+use dyn_clone::{clone_trait_object, DynClone};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{AttrStyle, Attribute, LitStr};
 
 use crate::{field::ClapField, RenameAll};
+
+pub(crate) trait ClapIdentName {
+    fn get_ident(&self) -> Option<Ident>;
+    fn get_name(&self) -> Option<String>;
+
+    fn get_parent(&self) -> Option<Option<Box<dyn ClapFieldParent>>> {
+        None
+    }
+
+    fn get_ident_or(&self) -> Result<Ident> {
+        self.get_ident()
+            .ok_or_else(|| Error::custom("Failed to get ident"))
+    }
+    fn get_name_or(&self) -> Result<String> {
+        let ident = self.get_ident_or()?;
+
+        self.get_name().ok_or_else(|| {
+            Error::custom(format!("Couldn't get name for {}", ident)).with_span(&ident)
+        })
+    }
+    fn get_parent_or(&self) -> Result<Box<dyn ClapFieldParent>> {
+        let ident = self.get_ident_or()?;
+
+        self.get_parent().flatten().ok_or_else(|| {
+            Error::custom(format!("Couldn't get parent for {}", ident)).with_span(&ident)
+        })
+    }
+}
+
+pub(crate) trait ClapFieldParent: ClapIdentName + DynClone {
+    fn get_ident_with_parent(&self) -> Result<Ident>;
+}
+
+#[derive(Clone)]
+pub(crate) struct ClapIdentNameContainer(
+    Option<Ident>,
+    Option<Option<Box<dyn ClapFieldParent>>>,
+    Option<String>,
+);
+
+impl ClapIdentNameContainer {
+    pub fn from(s: &impl ClapIdentName) -> Self {
+        let ident = s.get_ident();
+        let parent_ident = s.get_parent();
+        let name = s.get_name();
+
+        Self(ident, parent_ident, name)
+    }
+}
+
+impl ClapIdentName for ClapIdentNameContainer {
+    fn get_ident(&self) -> Option<Ident> {
+        self.0.clone()
+    }
+    fn get_name(&self) -> Option<String> {
+        self.2.clone()
+    }
+
+    fn get_parent(&self) -> Option<Option<Box<dyn ClapFieldParent>>> {
+        self.1.clone()
+    }
+}
+
+impl ClapFieldParent for ClapIdentNameContainer {
+    fn get_ident_with_parent(&self) -> Result<Ident> {
+        let ident = self.get_ident_or()?;
+
+        let parent_ident = self
+            .get_parent()
+            .map(|o| {
+                o.ok_or_else(|| {
+                    Error::custom(format!("Failed to get parent for {}", ident)).with_span(&ident)
+                })
+            })
+            .transpose()?
+            .map(|p| p.get_ident_with_parent())
+            .transpose()?
+            .map(|i| i.to_string())
+            .unwrap_or_default();
+
+        Ok(format_ident!("{}{}", parent_ident, ident))
+    }
+}
+
+clone_trait_object!(ClapFieldParent);
+
+impl std::fmt::Debug for Box<dyn ClapFieldParent> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Box<ClapFieldParent>")
+    }
+}
 
 pub(crate) trait ClapTokensResult {
     fn to_tokens_result(&self) -> Result<TokenStream>;
@@ -27,13 +119,15 @@ pub(crate) trait ClapFields {
     fn get_rename_all_value(&self) -> RenameAll;
 }
 
-pub(crate) trait ClapFieldStructs: ClapFields {
+pub(crate) trait ClapFieldStructs: ClapIdentName + ClapFields + Clone {
     fn get_fieldstructs(&self) -> Vec<ClapField> {
         self.get_fields()
             .iter()
             .cloned()
             .cloned()
             .map(|mut v| {
+                let container = ClapIdentNameContainer::from(self);
+                v.parent = Some(Box::new(container));
                 v.rename_all = self.get_rename_all();
                 v.rename_all_env = self.get_rename_all_env();
                 v.rename_all_value = self.get_rename_all_value();
@@ -72,8 +166,6 @@ pub(crate) trait ClapFieldStructs: ClapFields {
 }
 
 pub(crate) trait ClapRename {
-    fn get_name(&self) -> String;
-
     fn to_tokens_rename_all(
         &self,
         rename: RenameAll,
@@ -93,12 +185,10 @@ pub(crate) trait ClapRename {
 }
 
 pub(crate) trait ClapTraitImpls:
-    ClapRename + ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
+    ClapIdentName + ClapRename + ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
 {
-    fn get_ident(&self) -> &Ident;
-
     fn to_tokens_impl_args(&self) -> Result<TokenStream> {
-        let ident = self.get_ident();
+        let ident = self.get_ident_or()?;
 
         let name_storage = self.to_tokens_name_storage();
         let help_heading = self.to_tokens_help_heading();
@@ -137,7 +227,7 @@ pub(crate) trait ClapTraitImpls:
     }
 
     fn to_tokens_impl_from_arg_matches(&self) -> Result<TokenStream> {
-        let ident = self.get_ident();
+        let ident = self.get_ident_or()?;
 
         let from_arg_matches_fields = self.to_tokens_from_arg_matches_fields()?;
         let update_from_arg_matches_fields = self.to_tokens_update_from_arg_matches_fields()?;
@@ -160,11 +250,11 @@ pub(crate) trait ClapTraitImpls:
         })
     }
 
-    fn to_tokens_impl_into_app(&self) -> TokenStream {
-        let ident = self.get_ident();
-        let name = self.get_name();
+    fn to_tokens_impl_into_app(&self) -> Result<TokenStream> {
+        let ident = self.get_ident_or()?;
+        let name = self.get_name_or()?;
 
-        quote! {
+        Ok(quote! {
             impl clap::IntoApp for #ident {
                 fn into_app<'help>() -> clap::App<'help> {
                     let app = clap::App::new(#name);
@@ -177,7 +267,7 @@ pub(crate) trait ClapTraitImpls:
             }
 
             impl clap_derive_darling::Clap for #ident {}
-        }
+        })
     }
 }
 

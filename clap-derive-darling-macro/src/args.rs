@@ -8,17 +8,14 @@ use darling::{
 use quote::quote;
 use syn::Ident;
 
-use crate::{
-    common::{
-        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapRename, ClapTokensResult, ClapTraitImpls,
-    },
-    RenameAllCasing,
+use crate::common::{
+    ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
+    ClapIdentName, ClapRename, ClapTokensResult, ClapTraitImpls,
 };
 
 use super::{common::ClapParserArgsCommon, field::ClapField, RenameAll};
 
-#[derive(Debug, FromDeriveInput)]
+#[derive(Clone, Debug, FromDeriveInput)]
 #[darling(attributes(clap), forward_attrs(doc), supports(struct_named))]
 pub(crate) struct ClapArgs {
     ident: Ident,
@@ -48,6 +45,15 @@ pub(crate) struct ClapArgs {
     rename_all_env: RenameAll,
     #[darling(skip, default = "crate::default_rename_all_value")]
     rename_all_value: RenameAll,
+}
+
+impl ClapIdentName for ClapArgs {
+    fn get_ident(&self) -> Option<Ident> {
+        Some(self.ident.clone())
+    }
+    fn get_name(&self) -> Option<String> {
+        self.name.clone()
+    }
 }
 
 impl ClapTokensResult for ClapArgs {
@@ -83,20 +89,8 @@ impl ClapFields for ClapArgs {
     }
 }
 impl ClapFieldStructs for ClapArgs {}
-impl ClapRename for ClapArgs {
-    fn get_name(&self) -> String {
-        self.name.clone().unwrap_or_else(|| {
-            self.ident
-                .to_string()
-                .to_rename_all_case(self.get_rename_all())
-        })
-    }
-}
-impl ClapTraitImpls for ClapArgs {
-    fn get_ident(&self) -> &Ident {
-        &self.ident
-    }
-}
+impl ClapRename for ClapArgs {}
+impl ClapTraitImpls for ClapArgs {}
 impl ClapParserArgsCommon for ClapArgs {
     fn get_author(&self) -> Option<&Override<String>> {
         self.author.as_ref()

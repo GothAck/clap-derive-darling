@@ -87,15 +87,17 @@ pub trait Clap: FromArgMatches + IntoApp + Sized {
     /// Parse from `std::env::args_os()`, exit on error
     fn parse() -> Self {
         let matches = <Self as IntoApp>::into_app().get_matches();
-        <Self as FromArgMatches>::from_arg_matches(&matches, None)
+        <Self as FromArgMatches>::from_arg_matches(&matches, Vec::new())
             .expect("IntoApp validated everything")
     }
 
     /// Parse from `std::env::args_os()`, return Err on error.
     fn try_parse() -> Result<Self, Error> {
         let matches = <Self as IntoApp>::into_app().try_get_matches()?;
-        Ok(<Self as FromArgMatches>::from_arg_matches(&matches, None)
-            .expect("IntoApp validated everything"))
+        Ok(
+            <Self as FromArgMatches>::from_arg_matches(&matches, Vec::new())
+                .expect("IntoApp validated everything"),
+        )
     }
 
     /// Parse from iterator, exit on error
@@ -106,7 +108,7 @@ pub trait Clap: FromArgMatches + IntoApp + Sized {
         T: Into<OsString> + Clone,
     {
         let matches = <Self as IntoApp>::into_app().get_matches_from(itr);
-        <Self as FromArgMatches>::from_arg_matches(&matches, None)
+        <Self as FromArgMatches>::from_arg_matches(&matches, Vec::new())
             .expect("IntoApp validated everything")
     }
 
@@ -118,8 +120,10 @@ pub trait Clap: FromArgMatches + IntoApp + Sized {
         T: Into<OsString> + Clone,
     {
         let matches = <Self as IntoApp>::into_app().try_get_matches_from(itr)?;
-        Ok(<Self as FromArgMatches>::from_arg_matches(&matches, None)
-            .expect("IntoApp validated everything"))
+        Ok(
+            <Self as FromArgMatches>::from_arg_matches(&matches, Vec::new())
+                .expect("IntoApp validated everything"),
+        )
     }
 
     /// Update from iterator, exit on error
@@ -131,7 +135,7 @@ pub trait Clap: FromArgMatches + IntoApp + Sized {
     {
         // TODO find a way to get partial matches
         let matches = <Self as IntoApp>::into_app_for_update().get_matches_from(itr);
-        <Self as FromArgMatches>::update_from_arg_matches(self, &matches, None).unwrap();
+        <Self as FromArgMatches>::update_from_arg_matches(self, &matches, Vec::new()).unwrap();
     }
 
     /// Update from iterator, return Err on error.
@@ -142,7 +146,7 @@ pub trait Clap: FromArgMatches + IntoApp + Sized {
         T: Into<OsString> + Clone,
     {
         let matches = <Self as IntoApp>::into_app_for_update().try_get_matches_from(itr)?;
-        <Self as FromArgMatches>::update_from_arg_matches(self, &matches, None)?;
+        <Self as FromArgMatches>::update_from_arg_matches(self, &matches, Vec::new())?;
         Ok(())
     }
 }
@@ -179,13 +183,13 @@ pub trait FromArgMatches: Sized {
     ///    }
     /// }
     /// ```
-    fn from_arg_matches(matches: &ArgMatches, prefix: Option<String>) -> Result<Self, Error>;
+    fn from_arg_matches(matches: &ArgMatches, prefix: Vec<&'static str>) -> Result<Self, Error>;
 
     /// Assign values from `ArgMatches` to `self`.
     fn update_from_arg_matches(
         &mut self,
         matches: &ArgMatches,
-        prefix: Option<String>,
+        prefix: Vec<&'static str>,
     ) -> Result<(), Error>;
 }
 
@@ -218,13 +222,13 @@ pub trait Args: FromArgMatches + Sized {
     /// Append to [`App`] so it can instantiate `Self`.
     ///
     /// See also [`IntoApp`].
-    fn augment_args(app: App<'_>, prefix: Option<String>) -> App<'_>;
+    fn augment_args<'a>(app: App<'a>, prefix: Vec<&'static str>) -> App<'a>;
     /// Append to [`App`] so it can update `self`.
     ///
     /// This is used to implement `#[clap(flatten)]`
     ///
     /// See also [`IntoApp`].
-    fn augment_args_for_update(app: App<'_>, prefix: Option<String>) -> App<'_>;
+    fn augment_args_for_update<'a>(app: App<'a>, prefix: Vec<&'static str>) -> App<'a>;
 }
 
 /// Parse a sub-command into a user-defined enum.
@@ -255,13 +259,13 @@ pub trait Subcommand: FromArgMatches + Sized {
     /// Append to [`App`] so it can instantiate `Self`.
     ///
     /// See also [`IntoApp`].
-    fn augment_subcommands(app: App<'_>, prefix: Option<String>) -> App<'_>;
+    fn augment_subcommands<'a>(app: App<'a>, prefix: Vec<&'static str>) -> App<'a>;
     /// Append to [`App`] so it can update `self`.
     ///
     /// This is used to implement `#[clap(flatten)]`
     ///
     /// See also [`IntoApp`].
-    fn augment_subcommands_for_update(app: App<'_>, prefix: Option<String>) -> App<'_>;
+    fn augment_subcommands_for_update<'a>(app: App<'a>, prefix: Vec<&'static str>) -> App<'a>;
     /// Test whether `Self` can parse a specific subcommand
     fn has_subcommand(name: &str) -> bool;
 }

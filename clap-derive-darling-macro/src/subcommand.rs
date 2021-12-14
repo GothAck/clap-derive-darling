@@ -91,7 +91,7 @@ impl ClapSubcommand {
 
         Ok(quote! {
             impl clap_derive_darling::FromArgMatches for #ident {
-                fn from_arg_matches(#arg_matches_ident: &clap::ArgMatches, #prefix_ident: Option<String>) -> Result<Self, clap::Error> {
+                fn from_arg_matches(#arg_matches_ident: &clap::ArgMatches, #prefix_ident: Vec<&'static str>) -> Result<Self, clap::Error> {
                     if let Some((clap_name, sub_arg_matches)) = #arg_matches_ident.subcommand() {
                         {
                             let #arg_matches_ident = sub_arg_matches;
@@ -103,7 +103,7 @@ impl ClapSubcommand {
                         Err(clap::Error::raw(clap::ErrorKind::MissingSubcommand, "A subcommand is required but one was not provided"))
                     }
                 }
-                fn update_from_arg_matches(&mut self, #arg_matches_ident: &clap::ArgMatches, #prefix_ident: Option<String>) -> Result<(), clap::Error> {
+                fn update_from_arg_matches(&mut self, #arg_matches_ident: &clap::ArgMatches, #prefix_ident: Vec<&'static str>) -> Result<(), clap::Error> {
                     if let Some((clap_name, sub_arg_matches)) = #arg_matches_ident.subcommand() {
                         match self {
                             #(#update_from_arg_matches_variants)*
@@ -144,12 +144,12 @@ impl ClapSubcommand {
 
         Ok(quote! {
             impl clap_derive_darling::Subcommand for #ident {
-                fn augment_subcommands<'b>(#app_ident: clap::App<'b>, #prefix_ident: Option<String>) -> clap::App<'b> {
+                fn augment_subcommands<'b>(#app_ident: clap::App<'b>, #prefix_ident: Vec<&'static str>) -> clap::App<'b> {
                     #(#augment_subcommands_variants)*
 
                     #app_ident
                 }
-                fn augment_subcommands_for_update<'b>(#app_ident: clap::App<'b>, #prefix_ident: Option<String>) -> clap::App<'b> {
+                fn augment_subcommands_for_update<'b>(#app_ident: clap::App<'b>, #prefix_ident: Vec<&'static str>) -> clap::App<'b> {
                     #(#augment_subcommands_for_update_variants)*
 
                     #app_ident
@@ -377,7 +377,7 @@ impl ClapSubcommandVariant {
                     let clap_subcommand = clap::App::new(#name);
 
                     let clap_subcommand = {
-                        <#first_field_ty as clap_derive_darling::Args>::augment_args(clap_subcommand, None)
+                        <#first_field_ty as clap_derive_darling::Args>::augment_args(clap_subcommand, Vec::new())
                     };
 
                     clap_subcommand

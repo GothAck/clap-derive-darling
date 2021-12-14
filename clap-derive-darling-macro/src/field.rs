@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use darling::{util::Override, Error, FromField, FromMeta, Result, ToTokens};
+use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Expr, GenericArgument, Ident, LitStr, Path, PathArguments, Type};
@@ -62,7 +63,7 @@ pub(crate) struct ClapField {
     #[darling(skip)]
     pub parent: Option<Box<dyn ClapFieldParent>>,
     #[darling(skip)]
-    pub flatten_args: Vec<String>,
+    pub flatten_args: Vec<Vec<String>>,
 
     #[darling(skip, default = "crate::default_rename_all")]
     pub rename_all: RenameAll,
@@ -331,32 +332,20 @@ impl ClapField {
     fn get_flatten(&self) -> (Ident, Option<TokenStream>) {
         let prefix_ident = self.get_prefix_ident();
 
-        if let Some(flatten) = &self.flatten {
+        if let Some(Override::Explicit(prefix)) = &self.flatten {
             let subprefix_ident = format_ident!("___subprefix");
-            let prefix = match flatten {
-                Override::Explicit(prefix) => Some(quote! { vec.push(#prefix.to_string()); }),
-                Override::Inherit => None,
-            };
-
             (
                 subprefix_ident.clone(),
                 Some(quote! {
                     let #subprefix_ident = {
-                        let mut vec = Vec::new();
-                        if let Some(#prefix_ident) = #prefix_ident.as_ref() {
-                            vec.push(#prefix_ident.to_string());
-                        }
-                        #prefix
-                        if vec.is_empty() {
-                            None
-                        } else {
-                            Some(vec.join("-"))
-                        }
+                        let mut vec = #prefix_ident.clone();
+                        vec.push(#prefix);
+                        vec
                     };
                 }),
             )
         } else {
-            (self.get_prefix_ident(), None)
+            (prefix_ident, None)
         }
     }
 
@@ -601,10 +590,16 @@ impl ClapField {
                     .flatten_args
                     .iter()
                     .map(|prefix| {
-                        let val = format!("{}_{}", prefix, val).to_rename_all_case(rename);
+                        let val =
+                            format!("{}_{}", prefix.join("_"), val).to_rename_all_case(rename);
+
+                        let prefix_iter = prefix.iter().map(|p| quote!(#p));
+
+                        let prefix_arr =
+                            Itertools::intersperse(prefix_iter, quote!(,)).collect::<Vec<_>>();
 
                         quote! {
-                            if #prefix_ident == #prefix {
+                            if #prefix_ident == [#(#prefix_arr)*] {
                                 #val
                             } else
                         }
@@ -613,14 +608,13 @@ impl ClapField {
 
                 quote! {
                     {
-                        if let Some(#prefix_ident) = &#prefix_ident {
-                            #(#if_vals)* {
-                                panic!("Prefix {} not defined for {}", #prefix_ident, #parent_ident_str);
-                            }
-                        } else {
+                        if #prefix_ident.is_empty() {
                             #none_val
+                        } else {
+                            #(#if_vals)* {
+                                panic!("Prefix {:?} not defined for {}", #prefix_ident, #parent_ident_str);
+                            }
                         }
-
                     }
                 }
             }

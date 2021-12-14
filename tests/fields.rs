@@ -86,7 +86,7 @@ fn test_reuse_same_struct() {
     }
 
     #[derive(Args)]
-    #[clap(flatten("db", "api"))]
+    #[clap(flatten("db"), flatten("api"))]
     struct Settings {
         #[clap(long)]
         uri: Option<String>,

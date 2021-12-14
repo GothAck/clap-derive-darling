@@ -1,5 +1,5 @@
 impl clap_derive_darling::Args for Application {
-    fn augment_args(___app: clap::App<'_>, ___prefix: Option<String>) -> clap::App<'_> {
+    fn augment_args<'a>(___app: clap::App<'a>, ___prefix: Vec<&'static str>) -> clap::App<'a> {
         let ___app = ___app.arg({
             let ___name = "name";
             let ___value = "NAME";
@@ -27,19 +27,8 @@ impl clap_derive_darling::Args for Application {
                 .validator(|s| ::std::str::FromStr::from_str(s).map(|_: String| ()))
         });
         let old_heading = ___app.get_help_heading();
-        let ___subprefix = {
-            let mut vec = Vec::new();
-            if let Some(___prefix) = ___prefix.as_ref() {
-                vec.push(___prefix.to_string());
-            }
-            if vec.is_empty() {
-                None
-            } else {
-                Some(vec.join("-"))
-            }
-        };
         let ___app =
-            <Flatten as clap_derive_darling::Args>::augment_args(___app, ___subprefix.clone());
+            <Flatten as clap_derive_darling::Args>::augment_args(___app, ___prefix.clone());
         let ___app = ___app.help_heading(old_heading);
         let ___app = ___app.arg({
             let ___name = "opt-arg-enum";
@@ -122,7 +111,10 @@ impl clap_derive_darling::Args for Application {
         let ___app = ___app.setting(clap::AppSettings::SubcommandRequiredElseHelp);
         ___app
     }
-    fn augment_args_for_update(___app: clap::App<'_>, ___prefix: Option<String>) -> clap::App<'_> {
+    fn augment_args_for_update<'a>(
+        ___app: clap::App<'a>,
+        ___prefix: Vec<&'static str>,
+    ) -> clap::App<'a> {
         let ___app = ___app.arg({
             let ___name = "name";
             let ___value = "NAME";
@@ -150,19 +142,8 @@ impl clap_derive_darling::Args for Application {
                 .validator(|s| ::std::str::FromStr::from_str(s).map(|_: String| ()))
         });
         let old_heading = ___app.get_help_heading();
-        let ___subprefix = {
-            let mut vec = Vec::new();
-            if let Some(___prefix) = ___prefix.as_ref() {
-                vec.push(___prefix.to_string());
-            }
-            if vec.is_empty() {
-                None
-            } else {
-                Some(vec.join("-"))
-            }
-        };
         let ___app =
-            <Flatten as clap_derive_darling::Args>::augment_args(___app, ___subprefix.clone());
+            <Flatten as clap_derive_darling::Args>::augment_args(___app, ___prefix.clone());
         let ___app = ___app.help_heading(old_heading);
         let ___app = ___app.arg({
             let ___name = "opt-arg-enum";
@@ -249,7 +230,7 @@ impl clap_derive_darling::Args for Application {
 impl clap_derive_darling::FromArgMatches for Application {
     fn from_arg_matches(
         ___arg_matches: &clap::ArgMatches,
-        ___prefix: Option<String>,
+        ___prefix: Vec<&'static str>,
     ) -> Result<Self, clap::Error> {
         let v = Application {
             name: {
@@ -287,18 +268,7 @@ impl clap_derive_darling::FromArgMatches for Application {
                     .transpose()?
             },
             flatten: {
-                let ___subprefix = {
-                    let mut vec = Vec::new();
-                    if let Some(___prefix) = ___prefix.as_ref() {
-                        vec.push(___prefix.to_string());
-                    }
-                    if vec.is_empty() {
-                        None
-                    } else {
-                        Some(vec.join("-"))
-                    }
-                };
-                clap_derive_darling::FromArgMatches::from_arg_matches(___arg_matches, ___subprefix)
+                clap_derive_darling::FromArgMatches::from_arg_matches(___arg_matches, ___prefix)
                     .unwrap()
             },
             opt_arg_enum: {
@@ -406,7 +376,7 @@ impl clap_derive_darling::FromArgMatches for Application {
     fn update_from_arg_matches(
         &mut self,
         ___arg_matches: &clap::ArgMatches,
-        ___prefix: Option<String>,
+        ___prefix: Vec<&'static str>,
     ) -> Result<(), clap::Error> {
         {
             #[allow(non_snake_case)]
@@ -454,21 +424,10 @@ impl clap_derive_darling::FromArgMatches for Application {
             #[allow(non_snake_case)]
             let flatten = &mut self.flatten;
             {
-                let ___subprefix = {
-                    let mut vec = Vec::new();
-                    if let Some(___prefix) = ___prefix.as_ref() {
-                        vec.push(___prefix.to_string());
-                    }
-                    if vec.is_empty() {
-                        None
-                    } else {
-                        Some(vec.join("-"))
-                    }
-                };
                 clap_derive_darling::FromArgMatches::update_from_arg_matches(
                     flatten,
                     ___arg_matches,
-                    ___subprefix,
+                    ___prefix,
                 )
             };
         }
@@ -606,11 +565,11 @@ impl clap_derive_darling::FromArgMatches for Application {
 impl clap::IntoApp for Application {
     fn into_app<'help>() -> clap::App<'help> {
         let ___app = clap::App::new("application");
-        <Self as clap_derive_darling::Args>::augment_args(___app, None)
+        <Self as clap_derive_darling::Args>::augment_args(___app, Vec::new())
     }
     fn into_app_for_update<'help>() -> clap::App<'help> {
         let ___app = clap::App::new("application");
-        <Self as clap_derive_darling::Args>::augment_args_for_update(___app, None)
+        <Self as clap_derive_darling::Args>::augment_args_for_update(___app, Vec::new())
     }
 }
 impl clap_derive_darling::Clap for Application {}

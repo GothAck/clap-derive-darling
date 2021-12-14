@@ -22,8 +22,8 @@ pub(crate) struct StructParser {
     ident: Ident,
     data: ast::Data<Ignored, ClapField>,
 
-    #[darling(default)]
-    flatten: VecStringAttr,
+    #[darling(default, multiple)]
+    flatten: Vec<VecStringAttr>,
 
     #[darling(skip, default = "crate::default_rename_all")]
     rename_all: RenameAll,
@@ -61,7 +61,7 @@ impl ClapFields for StructParser {
 }
 impl ClapFieldStructs for StructParser {
     fn augment_field(&self, field: &mut ClapField) {
-        field.flatten_args = self.flatten.to_strings();
+        field.flatten_args = self.flatten.iter().map(|v| v.to_vec()).collect();
     }
 }
 
@@ -275,7 +275,7 @@ fn test_to_tokens_augment() {
     let mut file = mint.new_goldenfile("test_to_tokens_augment.rs").unwrap();
 
     let input = r#"
-#[clap(flatten("prefix0", "prefix1"))]
+#[clap(flatten("prefix0", "prefix1"), flatten("prefix2"))]
 struct Test {
     #[clap(long, env)]
     name: Option<String>,

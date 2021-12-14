@@ -211,7 +211,7 @@ pub(crate) trait ClapTraitImpls:
 
         Ok(quote! {
             impl clap_derive_darling::Args for #ident {
-                fn augment_args(#app_ident: clap::App<'_>, #prefix_ident: Option<String>) -> clap::App<'_> {
+                fn augment_args<'a>(#app_ident: clap::App<'a>, #prefix_ident: Vec<&'static str>) -> clap::App<'a> {
                     #help_heading
 
                     #(#augment_args_fields)*
@@ -220,7 +220,7 @@ pub(crate) trait ClapTraitImpls:
                         #author_and_version
                         #app_call_help_about
                 }
-                fn augment_args_for_update(#app_ident: clap::App<'_>, #prefix_ident: Option<String>) -> clap::App<'_> {
+                fn augment_args_for_update<'a>(#app_ident: clap::App<'a>, #prefix_ident: Vec<&'static str>) -> clap::App<'a> {
                     #help_heading
 
                     #(#augment_args_for_update_fields)*
@@ -243,14 +243,14 @@ pub(crate) trait ClapTraitImpls:
 
         Ok(quote! {
             impl clap_derive_darling::FromArgMatches for #ident {
-                fn from_arg_matches(#arg_matches_ident: &clap::ArgMatches, #prefix_ident: Option<String>) -> Result<Self, clap::Error> {
+                fn from_arg_matches(#arg_matches_ident: &clap::ArgMatches, #prefix_ident: Vec<&'static str>) -> Result<Self, clap::Error> {
                     let v = #ident {
                         #(#from_arg_matches_fields)*
                     };
 
                     Ok(v)
                 }
-                fn update_from_arg_matches(&mut self, #arg_matches_ident: &clap::ArgMatches, #prefix_ident: Option<String>) -> Result<(), clap::Error> {
+                fn update_from_arg_matches(&mut self, #arg_matches_ident: &clap::ArgMatches, #prefix_ident: Vec<&'static str>) -> Result<(), clap::Error> {
                     #(#update_from_arg_matches_fields)*
 
                     Ok(())
@@ -268,11 +268,11 @@ pub(crate) trait ClapTraitImpls:
             impl clap::IntoApp for #ident {
                 fn into_app<'help>() -> clap::App<'help> {
                     let #app_ident = clap::App::new(#name);
-                    <Self as clap_derive_darling::Args>::augment_args(#app_ident, None)
+                    <Self as clap_derive_darling::Args>::augment_args(#app_ident, Vec::new())
                 }
                 fn into_app_for_update<'help>() -> clap::App<'help> {
                     let #app_ident = clap::App::new(#name);
-                    <Self as clap_derive_darling::Args>::augment_args_for_update(#app_ident, None)
+                    <Self as clap_derive_darling::Args>::augment_args_for_update(#app_ident, Vec::new())
                 }
             }
 

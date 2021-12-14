@@ -16,6 +16,8 @@ struct Application {
 
     #[clap(flatten = "flat")]
     flatten: Flatten,
+    #[clap(flatten = "rar")]
+    rar: Rar,
 
     #[clap(long, arg_enum)]
     opt_arg_enum: Option<MyArgEnum>,
@@ -54,6 +56,16 @@ struct Flatten {
 
     #[clap(long)]
     flattened: Option<u32>,
+
+    #[clap(long, flatten = "rar")]
+    rar: Rar,
+}
+
+#[derive(Args, Debug)]
+#[clap(flatten("flat", "rar"), flatten("rar"))]
+struct Rar {
+    #[clap(long)]
+    rar: Option<String>,
 }
 
 #[derive(ArgEnum, Clone, Debug)]

@@ -38,8 +38,8 @@ pub(crate) struct ClapArgs {
     verbatim_doc_comment: bool,
     #[darling(default)]
     help_heading: Option<String>,
-    #[darling(default)]
-    flatten: VecStringAttr,
+    #[darling(default, multiple)]
+    flatten: Vec<VecStringAttr>,
 
     #[darling(skip, default = "crate::default_rename_all")]
     rename_all: RenameAll,
@@ -93,7 +93,7 @@ impl ClapFields for ClapArgs {
 }
 impl ClapFieldStructs for ClapArgs {
     fn augment_field(&self, field: &mut ClapField) {
-        field.flatten_args = self.flatten.to_strings();
+        field.flatten_args = self.flatten.iter().map(|v| v.to_vec()).collect();
     }
 }
 impl ClapTraitImpls for ClapArgs {}

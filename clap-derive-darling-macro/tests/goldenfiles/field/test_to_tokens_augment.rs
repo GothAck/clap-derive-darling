@@ -1,55 +1,55 @@
 fn rar() {
     let ___app = ___app.arg({
         let ___name = {
-            if let Some(___prefix) = &___prefix {
-                if ___prefix == "prefix0" {
-                    "prefix-0-name"
-                } else if ___prefix == "prefix1" {
-                    "prefix-1-name"
-                } else {
-                    panic!("Prefix {} not defined for {}", ___prefix, "Test");
-                }
-            } else {
+            if ___prefix.is_empty() {
                 "name"
+            } else {
+                if ___prefix == ["prefix0", "prefix1"] {
+                    "prefix-0-prefix-1-name"
+                } else if ___prefix == ["prefix2"] {
+                    "prefix-2-name"
+                } else {
+                    panic!("Prefix {:?} not defined for {}", ___prefix, "Test");
+                }
             }
         };
         let ___value = {
-            if let Some(___prefix) = &___prefix {
-                if ___prefix == "prefix0" {
-                    "PREFIX_0_NAME"
-                } else if ___prefix == "prefix1" {
-                    "PREFIX_1_NAME"
-                } else {
-                    panic!("Prefix {} not defined for {}", ___prefix, "Test");
-                }
-            } else {
+            if ___prefix.is_empty() {
                 "NAME"
+            } else {
+                if ___prefix == ["prefix0", "prefix1"] {
+                    "PREFIX_0_PREFIX_1_NAME"
+                } else if ___prefix == ["prefix2"] {
+                    "PREFIX_2_NAME"
+                } else {
+                    panic!("Prefix {:?} not defined for {}", ___prefix, "Test");
+                }
             }
         };
         let ___long = {
-            if let Some(___prefix) = &___prefix {
-                if ___prefix == "prefix0" {
-                    "prefix-0-name"
-                } else if ___prefix == "prefix1" {
-                    "prefix-1-name"
-                } else {
-                    panic!("Prefix {} not defined for {}", ___prefix, "Test");
-                }
-            } else {
+            if ___prefix.is_empty() {
                 "name"
+            } else {
+                if ___prefix == ["prefix0", "prefix1"] {
+                    "prefix-0-prefix-1-name"
+                } else if ___prefix == ["prefix2"] {
+                    "prefix-2-name"
+                } else {
+                    panic!("Prefix {:?} not defined for {}", ___prefix, "Test");
+                }
             }
         };
         let ___env = {
-            if let Some(___prefix) = &___prefix {
-                if ___prefix == "prefix0" {
-                    "PREFIX_0_NAME"
-                } else if ___prefix == "prefix1" {
-                    "PREFIX_1_NAME"
-                } else {
-                    panic!("Prefix {} not defined for {}", ___prefix, "Test");
-                }
-            } else {
+            if ___prefix.is_empty() {
                 "NAME"
+            } else {
+                if ___prefix == ["prefix0", "prefix1"] {
+                    "PREFIX_0_PREFIX_1_NAME"
+                } else if ___prefix == ["prefix2"] {
+                    "PREFIX_2_NAME"
+                } else {
+                    panic!("Prefix {:?} not defined for {}", ___prefix, "Test");
+                }
             }
         };
         clap::Arg::new(___name)
@@ -62,42 +62,42 @@ fn rar() {
     });
     let ___app = ___app.arg({
         let ___name = {
-            if let Some(___prefix) = &___prefix {
-                if ___prefix == "prefix0" {
-                    "prefix-0-lala"
-                } else if ___prefix == "prefix1" {
-                    "prefix-1-lala"
-                } else {
-                    panic!("Prefix {} not defined for {}", ___prefix, "Test");
-                }
-            } else {
+            if ___prefix.is_empty() {
                 "lala"
+            } else {
+                if ___prefix == ["prefix0", "prefix1"] {
+                    "prefix-0-prefix-1-lala"
+                } else if ___prefix == ["prefix2"] {
+                    "prefix-2-lala"
+                } else {
+                    panic!("Prefix {:?} not defined for {}", ___prefix, "Test");
+                }
             }
         };
         let ___value = {
-            if let Some(___prefix) = &___prefix {
-                if ___prefix == "prefix0" {
-                    "PREFIX_0_LALA"
-                } else if ___prefix == "prefix1" {
-                    "PREFIX_1_LALA"
-                } else {
-                    panic!("Prefix {} not defined for {}", ___prefix, "Test");
-                }
-            } else {
+            if ___prefix.is_empty() {
                 "LALA"
+            } else {
+                if ___prefix == ["prefix0", "prefix1"] {
+                    "PREFIX_0_PREFIX_1_LALA"
+                } else if ___prefix == ["prefix2"] {
+                    "PREFIX_2_LALA"
+                } else {
+                    panic!("Prefix {:?} not defined for {}", ___prefix, "Test");
+                }
             }
         };
         let ___long = {
-            if let Some(___prefix) = &___prefix {
-                if ___prefix == "prefix0" {
-                    "prefix-0-rar"
-                } else if ___prefix == "prefix1" {
-                    "prefix-1-rar"
-                } else {
-                    panic!("Prefix {} not defined for {}", ___prefix, "Test");
-                }
-            } else {
+            if ___prefix.is_empty() {
                 "rar"
+            } else {
+                if ___prefix == ["prefix0", "prefix1"] {
+                    "prefix-0-prefix-1-rar"
+                } else if ___prefix == ["prefix2"] {
+                    "prefix-2-rar"
+                } else {
+                    panic!("Prefix {:?} not defined for {}", ___prefix, "Test");
+                }
             }
         };
         clap::Arg::new(___name)
@@ -108,16 +108,9 @@ fn rar() {
     });
     let old_heading = ___app.get_help_heading();
     let ___subprefix = {
-        let mut vec = Vec::new();
-        if let Some(___prefix) = ___prefix.as_ref() {
-            vec.push(___prefix.to_string());
-        }
-        vec.push("demo".to_string());
-        if vec.is_empty() {
-            None
-        } else {
-            Some(vec.join("-"))
-        }
+        let mut vec = ___prefix.clone();
+        vec.push("demo");
+        vec
     };
     let ___app = <Other as clap_derive_darling::Args>::augment_args(___app, ___subprefix.clone());
     let ___app = ___app.help_heading(old_heading);

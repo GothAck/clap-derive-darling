@@ -8,8 +8,8 @@ use syn::Ident;
 use crate::{
     common::{
         ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldParent, ClapFieldStructs,
-        ClapFields, ClapIdentName, ClapIdentNameContainer, ClapParserArgsCommon, ClapRename,
-        ClapTokensResult, ClapTraitImpls,
+        ClapFields, ClapIdentName, ClapIdentNameContainer, ClapParserArgsCommon, ClapTokensResult,
+        ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
@@ -120,8 +120,6 @@ impl ClapSubcommand {
     fn to_tokens_impl_subcommand(&self) -> Result<TokenStream> {
         let ident = &self.ident;
 
-        let name_storage = self.to_tokens_name_storage();
-
         let augment_subcommands_variants = self
             .get_variants()
             .iter()
@@ -141,11 +139,8 @@ impl ClapSubcommand {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(quote! {
-
             impl clap_derive_darling::Subcommand for #ident {
                 fn augment_subcommands<'b>(clap_app: clap::App<'b>, prefix: Option<String>) -> clap::App<'b> {
-                    #name_storage
-
                     let clap_app = clap_app;
 
                     #(#augment_subcommands_variants)*
@@ -153,8 +148,6 @@ impl ClapSubcommand {
                     clap_app
                 }
                 fn augment_subcommands_for_update<'b>(clap_app: clap::App<'b>, prefix: Option<String>) -> clap::App<'b> {
-                    #name_storage
-
                     let clap_app = clap_app;
 
                     #(#augment_subcommands_for_update_variants)*
@@ -232,7 +225,7 @@ impl ClapSubcommandVariant {
         let name = self.get_name_or()?;
         let parent_ident = self.get_parent_or()?.get_ident_or()?;
 
-        let fields = self.get_fields();
+        let fields = self.get_fieldstructs();
 
         Ok(if self.skip {
             quote! {}
@@ -289,7 +282,7 @@ impl ClapSubcommandVariant {
         let parent_ident = self.get_parent_or()?.get_ident_or()?;
 
         let fields_ref_mut = self
-            .get_fields()
+            .get_fieldstructs()
             .iter()
             .map(|f| {
                 let ident = &f.ident;
@@ -328,7 +321,7 @@ impl ClapSubcommandVariant {
             }
         } else if self.fields.is_struct() {
             let update_from_arg_matches_raw = self
-                .get_fields()
+                .get_fieldstructs()
                 .iter()
                 .map(|f| f.to_tokens_update_from_arg_matches_raw())
                 .collect::<Result<Vec<_>>>()?;
@@ -356,7 +349,7 @@ impl ClapSubcommandVariant {
         let author_and_version = self.to_tokens_author_and_version();
         let app_call_help_about = self.to_tokens_app_call_help_about();
 
-        let fields = self.get_fields();
+        let fields = self.get_fieldstructs();
 
         Ok(if self.skip {
             quote! {}
@@ -386,7 +379,7 @@ impl ClapSubcommandVariant {
             }
         } else if self.fields.is_struct() {
             let augment = self
-                .get_fields()
+                .get_fieldstructs()
                 .iter()
                 .map(|f| f.to_tokens_augment())
                 .collect::<Result<Vec<_>>>()?;
@@ -451,7 +444,6 @@ impl ClapFields for ClapSubcommandVariant {
     }
 }
 impl ClapFieldStructs for ClapSubcommandVariant {}
-impl ClapRename for ClapSubcommandVariant {}
 impl ClapTraitImpls for ClapSubcommandVariant {}
 impl ClapParserArgsCommon for ClapSubcommandVariant {
     fn get_author(&self) -> Option<&Override<String>> {

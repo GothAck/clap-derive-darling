@@ -5,8 +5,8 @@ use quote::quote;
 use syn::Ident;
 
 use crate::{
-    common::{ClapIdentName, ClapParserArgsCommon, ClapRename, ClapTokensResult},
-    RenameAll,
+    common::{ClapIdentName, ClapParserArgsCommon, ClapTokensResult},
+    RenameAll, RenameAllCasing,
 };
 
 #[derive(Debug, FromDeriveInput)]
@@ -61,8 +61,6 @@ impl ClapArgEnum {
     fn to_tokens_impl_arg_enum(&self) -> darling::Result<proc_macro2::TokenStream> {
         let ident = &self.ident;
 
-        let name_storage = self.to_tokens_name_storage();
-
         let self_variants = self
             .get_variants()
             .iter()
@@ -86,8 +84,6 @@ impl ClapArgEnum {
                     ]
                 }
                 fn to_possible_value<'a>(&self) -> Option<clap::PossibleValue<'a>> {
-                    #name_storage
-
                     match self {
                         #(#match_to_possible_value)*
                         _ => None,
@@ -119,6 +115,7 @@ impl ClapArgEnumVariant {
             .as_ref()
             .ok_or_else(|| darling::Error::custom("Missing parent_ident").with_span(&self.ident))
     }
+
     fn to_tokens_match_to_possible_value(&self) -> darling::Result<proc_macro2::TokenStream> {
         let ident = &self.ident;
         let parent_ident = self.get_parent_ident()?;
@@ -132,15 +129,12 @@ impl ClapArgEnumVariant {
         }
 
         let ident = &self.ident;
-        let name = self.get_name_or()?;
-        let name_renamed =
-            self.to_tokens_rename_all(self.rename_all, None, quote! { #name.to_string() });
+        let name = self.get_name_or()?.to_rename_all_case(self.rename_all);
+
         let help = self.help.as_ref().map(|v| quote! { .help(#v) });
 
         Ok(quote! {
-            Self::#ident => Some(clap::PossibleValue::new(
-                get_cache_str_keyed("name", #name, &None, || #name_renamed)
-            ) #help),
+            Self::#ident => Some(clap::PossibleValue::new(#name) #help),
         })
     }
 }
@@ -154,5 +148,3 @@ impl ClapIdentName for ClapArgEnumVariant {
         Some(quote!(#ident).to_string())
     }
 }
-
-impl ClapRename for ClapArgEnumVariant {}

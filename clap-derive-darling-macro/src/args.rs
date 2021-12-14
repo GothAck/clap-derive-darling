@@ -1,5 +1,3 @@
-use std::vec;
-
 use darling::{
     ast,
     util::{Ignored, Override},
@@ -8,13 +6,14 @@ use darling::{
 use quote::quote;
 use syn::Ident;
 
-use crate::common::{
-    ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-    ClapIdentName, ClapRename, ClapTokensResult, ClapTraitImpls,
+use crate::{
+    common::{
+        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
+        ClapIdentName, ClapParserArgsCommon, ClapTokensResult, ClapTraitImpls, VecStringAttr,
+    },
+    field::ClapField,
+    RenameAll,
 };
-
-use super::{common::ClapParserArgsCommon, field::ClapField, RenameAll};
-
 #[derive(Clone, Debug, FromDeriveInput)]
 #[darling(attributes(clap), forward_attrs(doc), supports(struct_named))]
 pub(crate) struct ClapArgs {
@@ -38,6 +37,8 @@ pub(crate) struct ClapArgs {
     verbatim_doc_comment: bool,
     #[darling(default)]
     help_heading: Option<String>,
+    #[darling(default)]
+    flatten: VecStringAttr,
 
     #[darling(skip, default = "crate::default_rename_all")]
     rename_all: RenameAll,
@@ -88,8 +89,11 @@ impl ClapFields for ClapArgs {
         self.rename_all_value
     }
 }
-impl ClapFieldStructs for ClapArgs {}
-impl ClapRename for ClapArgs {}
+impl ClapFieldStructs for ClapArgs {
+    fn augment_field(&self, field: &mut ClapField) {
+        field.flatten_args = self.flatten.to_strings();
+    }
+}
 impl ClapTraitImpls for ClapArgs {}
 impl ClapParserArgsCommon for ClapArgs {
     fn get_author(&self) -> Option<&Override<String>> {

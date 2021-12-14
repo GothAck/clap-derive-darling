@@ -11,7 +11,7 @@ use syn::Ident;
 use crate::{
     common::{
         ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapIdentName, ClapParserArgsCommon, ClapRename, ClapTokensResult, ClapTraitImpls,
+        ClapIdentName, ClapParserArgsCommon, ClapTokensResult, ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
@@ -96,7 +96,6 @@ impl ClapFields for ClapParser {
     }
 }
 impl ClapFieldStructs for ClapParser {}
-impl ClapRename for ClapParser {}
 impl ClapTraitImpls for ClapParser {}
 impl ClapParserArgsCommon for ClapParser {
     fn get_author(&self) -> Option<&Override<String>> {

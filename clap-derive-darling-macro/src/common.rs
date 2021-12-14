@@ -1,8 +1,10 @@
-use darling::{util::Override, Error, Result};
+use std::ops::Deref;
+
+use darling::{util::Override, Error, FromMeta, Result};
 use dyn_clone::{clone_trait_object, DynClone};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use syn::{AttrStyle, Attribute, LitStr};
+use syn::{AttrStyle, Attribute, Lit, LitStr};
 
 use crate::{field::ClapField, RenameAll};
 
@@ -120,6 +122,8 @@ pub(crate) trait ClapFields {
 }
 
 pub(crate) trait ClapFieldStructs: ClapIdentName + ClapFields + Clone {
+    fn augment_field(&self, _field: &mut ClapField) {}
+
     fn get_fieldstructs(&self) -> Vec<ClapField> {
         self.get_fields()
             .iter()
@@ -131,6 +135,7 @@ pub(crate) trait ClapFieldStructs: ClapIdentName + ClapFields + Clone {
                 v.rename_all = self.get_rename_all();
                 v.rename_all_env = self.get_rename_all_env();
                 v.rename_all_value = self.get_rename_all_value();
+                self.augment_field(&mut v);
                 v
             })
             .collect()
@@ -165,32 +170,12 @@ pub(crate) trait ClapFieldStructs: ClapIdentName + ClapFields + Clone {
     }
 }
 
-pub(crate) trait ClapRename {
-    fn to_tokens_rename_all(
-        &self,
-        rename: RenameAll,
-        prefix: Option<TokenStream>,
-        name: TokenStream,
-    ) -> TokenStream {
-        if let Some(prefix) = prefix {
-            quote! {
-                #rename(clap_derive_darling::rename::prefix(#name, &#prefix))
-            }
-        } else {
-            quote! {
-                #rename(#name)
-            }
-        }
-    }
-}
-
 pub(crate) trait ClapTraitImpls:
-    ClapIdentName + ClapRename + ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
+    ClapIdentName + ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
 {
     fn to_tokens_impl_args(&self) -> Result<TokenStream> {
         let ident = self.get_ident_or()?;
 
-        let name_storage = self.to_tokens_name_storage();
         let help_heading = self.to_tokens_help_heading();
         let author_and_version = self.to_tokens_author_and_version();
         let app_call_help_about = self.to_tokens_app_call_help_about();
@@ -201,8 +186,6 @@ pub(crate) trait ClapTraitImpls:
         Ok(quote! {
             impl clap_derive_darling::Args for #ident {
                 fn augment_args(app: clap::App<'_>, prefix: Option<String>) -> clap::App<'_> {
-                    #name_storage
-
                     #help_heading
 
                     #(#augment_args_fields)*
@@ -212,8 +195,6 @@ pub(crate) trait ClapTraitImpls:
                         #app_call_help_about
                 }
                 fn augment_args_for_update(app: clap::App<'_>, prefix: Option<String>) -> clap::App<'_> {
-                    #name_storage
-
                     #help_heading
 
                     #(#augment_args_for_update_fields)*
@@ -275,36 +256,6 @@ pub(crate) trait ClapParserArgsCommon {
     fn get_author(&self) -> Option<&Override<String>>;
     fn get_version(&self) -> Option<&Override<String>>;
     fn get_help_heading(&self) -> Option<&String>;
-
-    fn to_tokens_name_storage(&self) -> TokenStream {
-        quote! {
-            use std::{collections::HashMap, sync::Mutex};
-            use clap_derive_darling::OnceBox;
-
-            static STR_CACHE: OnceBox<Mutex<HashMap<String, &'static str>>> = OnceBox::new();
-
-            fn string_to_static_str(s: String) -> &'static str {
-                Box::leak(s.into_boxed_str())
-            }
-
-            fn get_cache_str<F>(key: String, or_else: F) -> &'static str
-            where
-                F: Fn() -> String
-            {
-                let mut str_cache = STR_CACHE.get_or_init(|| Box::from(Mutex::from(HashMap::new()))).lock().unwrap();
-                str_cache
-                    .entry(key)
-                    .or_insert_with(|| string_to_static_str(or_else()))
-            }
-
-            fn get_cache_str_keyed<F>(ty: &str, string: &str, prefix: &Option<String>, or_else: F) -> &'static str
-            where
-                F: Fn() -> String
-            {
-                get_cache_str(clap_derive_darling::rename::cache_key(ty, string, prefix), or_else)
-            }
-        }
-    }
 
     fn to_tokens_author_and_version(&self) -> TokenStream {
         let author = self
@@ -470,4 +421,51 @@ mod sealed {
 
     impl Sealed for super::ClapDocHelpMarker {}
     impl Sealed for super::ClapDocAboutMarker {}
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct VecStringAttr(Vec<String>);
+
+impl VecStringAttr {
+    pub fn new<T: Into<String>>(vals: Vec<T>) -> Self {
+        Self(vals.into_iter().map(T::into).collect())
+    }
+
+    pub fn to_strings(&self) -> Vec<String> {
+        self.0.to_vec()
+    }
+}
+
+impl Deref for VecStringAttr {
+    type Target = Vec<String>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Vec<String>> for VecStringAttr {
+    fn from(v: Vec<String>) -> Self {
+        VecStringAttr::new(v)
+    }
+}
+
+impl From<VecStringAttr> for Vec<String> {
+    fn from(v: VecStringAttr) -> Self {
+        v.to_strings()
+    }
+}
+
+impl FromMeta for VecStringAttr {
+    fn from_list(items: &[syn::NestedMeta]) -> Result<Self> {
+        let mut vec = Vec::with_capacity(items.len());
+        for item in items {
+            if let syn::NestedMeta::Lit(Lit::Str(ref str)) = *item {
+                vec.push(str.value());
+            } else {
+                return Err(Error::custom("not a string").with_span(item));
+            }
+        }
+        Ok(VecStringAttr::new(vec))
+    }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use darling::{util::Override, Error, FromField, FromMeta, Result, ToTokens};
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
@@ -8,7 +10,7 @@ use crate::common::{
     ClapTokensResult,
 };
 
-use super::RenameAll;
+use super::{RenameAll, RenameAllCasing};
 
 enum ClapArgType {
     Bool,
@@ -59,6 +61,8 @@ pub(crate) struct ClapField {
 
     #[darling(skip)]
     pub parent: Option<Box<dyn ClapFieldParent>>,
+    #[darling(skip)]
+    pub flatten_args: Vec<String>,
 
     #[darling(skip, default = "crate::default_rename_all")]
     pub rename_all: RenameAll,
@@ -385,16 +389,16 @@ impl ClapField {
             let name = self.get_name_or()?;
             let parse = self.get_parse_defaulted()?;
             let parse_expr = parse.parse()?;
-            let name_renamed =
-                self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
 
-            let name_ident = format_ident!("___name");
-            let name_value_ident = format_ident!("___name_value");
-            let name_long_ident = format_ident!("___name_long");
-            let name_env_ident = format_ident!("___name_env");
+            let name_ident = self.get_name_ident();
+            let value_ident = self.get_value_ident();
+            let long_ident = self.get_long_ident();
+            let env_ident = self.get_env_ident();
 
+            let mut required_idents: HashMap<&Ident, Option<String>> = HashMap::new();
+
+            required_idents.insert(&name_ident, None);
             let builder = quote! {
-                let #name_ident = get_cache_str_keyed("name", #name, &prefix, || #name_renamed);
                 clap::Arg::new(#name_ident)
             };
 
@@ -423,23 +427,17 @@ impl ClapField {
 
             let builder = match &self.long {
                 Some(Override::Explicit(long)) => {
-                    let rename =
-                        self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#long));
+                    required_idents.insert(&long_ident, Some(long.clone()));
                     quote! {
-                        let #name_long_ident = get_cache_str_keyed("name_long", #name, &prefix, || #rename);
-
                         #builder
-                            .long(#name_long_ident)
+                            .long(#long_ident)
                     }
                 }
                 Some(Override::Inherit) => {
-                    let rename =
-                        self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+                    required_idents.insert(&long_ident, None);
                     quote! {
-                        let #name_long_ident = get_cache_str_keyed("name_long", #name, &prefix, || #rename);
-
                         #builder
-                            .long(#name_long_ident)
+                            .long(#long_ident)
                     }
                 }
                 None => builder,
@@ -447,23 +445,17 @@ impl ClapField {
 
             let builder = match &self.env {
                 Some(Override::Explicit(env)) => {
-                    let renmae =
-                        self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#env));
+                    required_idents.insert(&env_ident, Some(env.clone()));
                     quote! {
-                        let #name_env_ident = get_cache_str_keyed("name_env", #name, &prefix, || #renmae);
-
                         #builder
-                            .env(#name_env_ident)
+                            .env(#env_ident)
                     }
                 }
                 Some(Override::Inherit) => {
-                    let renmae =
-                        self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+                    required_idents.insert(&env_ident, None);
                     quote! {
-                        let #name_env_ident = get_cache_str_keyed("name_env", #name, &prefix, || #renmae);
-
                         #builder
-                            .env(#name_env_ident)
+                            .env(#env_ident)
                     }
                 }
                 None => builder,
@@ -477,18 +469,12 @@ impl ClapField {
                     }
                 }
                 _ => {
-                    let rename = self.rename_field(
-                        self.rename_all_value,
-                        Some(quote!(prefix)),
-                        quote!(#name),
-                    );
+                    required_idents.insert(&value_ident, Some(name));
 
                     quote! {
-                        let #name_value_ident = get_cache_str_keyed("name_value", #name, &prefix, || #rename);
-
                         #builder
                             .takes_value(true)
-                            .value_name(#name_value_ident)
+                            .value_name(#value_ident)
                     }
                 }
             };
@@ -506,10 +492,14 @@ impl ClapField {
                         .max_values(1)
                 },
                 ClapArgType::T => {
-                    let default = self.default_value.is_none();
-                    quote! {
-                        #builder
-                            .required(#default)
+                    if let Some(default_value) = &self.default_value {
+                        quote! {
+                            #builder
+                                .required(false)
+                                .default_value(#default_value)
+                        }
+                    } else {
+                        builder
                     }
                 }
                 ClapArgType::VecT | ClapArgType::OptionVecT => quote! {
@@ -546,11 +536,106 @@ impl ClapField {
                 }
             };
 
+            let required_idents = self.to_tokens_required_idents(required_idents)?;
+
             quote! {
                 let app = app.arg({
+                    #(#required_idents)*
+
                     #builder
                 });
             }
+        })
+    }
+
+    fn get_name_ident(&self) -> Ident {
+        format_ident!("___name")
+    }
+
+    fn get_value_ident(&self) -> Ident {
+        format_ident!("___value")
+    }
+
+    fn get_long_ident(&self) -> Ident {
+        format_ident!("___long")
+    }
+
+    fn get_env_ident(&self) -> Ident {
+        format_ident!("___env")
+    }
+
+    fn to_tokens_required_idents(
+        &self,
+        required_idents: HashMap<&Ident, Option<String>>,
+    ) -> Result<Vec<TokenStream>> {
+        let name = self.get_name_or()?;
+
+        let name_ident = self.get_name_ident();
+        let value_ident = self.get_value_ident();
+        let long_ident = self.get_long_ident();
+        let env_ident = self.get_env_ident();
+
+        [name_ident, value_ident, long_ident, env_ident]
+            .iter()
+            .filter_map(|req_ident| {
+                required_idents.get(req_ident).map(|val| {
+                    self.to_tokens_required_ident(req_ident, val.as_ref().unwrap_or(&name))
+                })
+            })
+            .collect()
+    }
+
+    fn to_tokens_required_ident(&self, req_ident: &Ident, val: &str) -> Result<TokenStream> {
+        let rename = {
+            if req_ident == &self.get_env_ident() {
+                self.rename_all_env
+            } else if req_ident == &self.get_value_ident() {
+                self.rename_all_value
+            } else {
+                self.rename_all
+            }
+        };
+
+        let parent_ident_str = self.get_parent_or()?.get_ident_or()?.to_string();
+
+        let val = {
+            if self.flatten_args.is_empty() {
+                let val = val.to_rename_all_case(rename);
+                quote!(#val)
+            } else {
+                let none_val = val.to_rename_all_case(rename);
+
+                let if_vals = self
+                    .flatten_args
+                    .iter()
+                    .map(|prefix| {
+                        let val = format!("{}_{}", prefix, val).to_rename_all_case(rename);
+
+                        quote! {
+                            if prefix == #prefix {
+                                #val
+                            } else
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                quote! {
+                    {
+                        if let Some(prefix) = &prefix {
+                            #(#if_vals)* {
+                                panic!("Prefix {} not defined for {}", prefix, #parent_ident_str);
+                            }
+                        } else {
+                            #none_val
+                        }
+
+                    }
+                }
+            }
+        };
+
+        Ok(quote! {
+            let #req_ident = #val;
         })
     }
 
@@ -665,10 +750,9 @@ impl ClapField {
             let parse = self.get_parse_defaulted()?;
             let parse_expr = parse.parse()?;
 
-            let name_ident = format_ident!("___name");
+            let name_ident = self.get_name_ident();
 
-            let field_name_renamed =
-                self.rename_field(self.rename_all, Some(quote!(prefix)), quote!(#name));
+            let required_ident = self.to_tokens_required_ident(&name_ident, &name)?;
 
             let mapper = if self.arg_enum {
                 quote! {
@@ -749,28 +833,11 @@ impl ClapField {
 
             quote! {
                 {
-                    let #name_ident = #field_name_renamed;
+                    #required_ident
                     #builder
                 }
             }
         })
-    }
-
-    fn rename_field(
-        &self,
-        rename: RenameAll,
-        prefix: Option<TokenStream>,
-        name: TokenStream,
-    ) -> TokenStream {
-        if let Some(prefix) = prefix {
-            quote! {
-                #rename(clap_derive_darling::rename::prefix(#name, &#prefix))
-            }
-        } else {
-            quote! {
-                #rename(#name)
-            }
-        }
     }
 }
 

@@ -36,6 +36,7 @@ struct Application {
 }
 
 #[derive(Args)]
+#[clap(flatten("flatten"))]
 struct Flatten {
     #[clap(skip)]
     other: u64,
@@ -85,6 +86,7 @@ fn test_reuse_same_struct() {
     }
 
     #[derive(Args)]
+    #[clap(flatten("db", "api"))]
     struct Settings {
         #[clap(long)]
         uri: Option<String>,

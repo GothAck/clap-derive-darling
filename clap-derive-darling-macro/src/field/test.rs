@@ -1,20 +1,69 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Write};
 
 use darling::{
     ast,
     util::{Ignored, Override},
     FromDeriveInput,
 };
+use goldenfile::Mint;
+use proc_macro2::Ident;
 use quote::quote;
 
 use super::{ClapField, ClapFieldParse};
-use crate::common::ClapTokensResult;
+use crate::{
+    common::{ClapFieldStructs, ClapFields, ClapIdentName, ClapTokensResult, VecStringAttr},
+    test_util::rustfmt_ext,
+    RenameAll,
+};
 
-#[derive(Debug, FromDeriveInput)]
+#[derive(Clone, Debug, FromDeriveInput)]
 #[darling(attributes(clap), forward_attrs(doc), supports(struct_named))]
 pub(crate) struct StructParser {
+    ident: Ident,
     data: ast::Data<Ignored, ClapField>,
     attrs: Vec<syn::Attribute>,
+
+    #[darling(default)]
+    flatten: VecStringAttr,
+
+    #[darling(skip, default = "crate::default_rename_all")]
+    rename_all: RenameAll,
+    #[darling(skip, default = "crate::default_rename_all_env")]
+    rename_all_env: RenameAll,
+    #[darling(skip, default = "crate::default_rename_all_value")]
+    rename_all_value: RenameAll,
+}
+
+impl ClapIdentName for StructParser {
+    fn get_ident(&self) -> Option<Ident> {
+        Some(self.ident.clone())
+    }
+    fn get_name(&self) -> Option<String> {
+        Some(self.ident.to_string())
+    }
+}
+impl ClapFields for StructParser {
+    fn get_fields(&self) -> Vec<&ClapField> {
+        self.data
+            .as_ref()
+            .take_struct()
+            .expect("Always a struct")
+            .fields
+    }
+    fn get_rename_all(&self) -> RenameAll {
+        self.rename_all
+    }
+    fn get_rename_all_env(&self) -> RenameAll {
+        self.rename_all_env
+    }
+    fn get_rename_all_value(&self) -> RenameAll {
+        self.rename_all_value
+    }
+}
+impl ClapFieldStructs for StructParser {
+    fn augment_field(&self, field: &mut ClapField) {
+        field.flatten_args = self.flatten.to_strings();
+    }
 }
 
 const INPUT_INHERIT: &str = r#"
@@ -219,4 +268,36 @@ fn test_parse() {
             .to_string(),
         quote!(value as T).to_string()
     );
+}
+
+#[test]
+fn test_to_tokens_augment() {
+    let mut mint = Mint::new("tests/goldenfiles/field");
+    let mut file = mint.new_goldenfile("test_to_tokens_augment.rs").unwrap();
+
+    let input = r#"
+#[clap(flatten("prefix0", "prefix1"))]
+struct Test {
+    #[clap(long, env)]
+    name: Option<String>,
+
+    #[clap(long = "rar")]
+    lala: String,
+
+    #[clap(flatten = "demo")]
+    demo: Other,
+}
+"#;
+
+    let parsed = syn::parse_str(input).unwrap();
+    let conf_struct = StructParser::from_derive_input(&parsed).unwrap();
+
+    let augment_fields = conf_struct.to_tokens_augment_args_fields().unwrap();
+
+    let output = quote! { fn rar() { #(#augment_fields)* } };
+
+    println!("{}", output.to_string());
+
+    file.write_all(rustfmt_ext(output).unwrap().as_bytes())
+        .unwrap();
 }

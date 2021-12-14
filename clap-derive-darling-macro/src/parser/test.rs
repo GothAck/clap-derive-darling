@@ -8,7 +8,7 @@ use crate::{common::ClapTokensResultAuto, test_util::rustfmt_ext};
 
 #[test]
 fn test() {
-    let mut mint = Mint::new("tests/goldenfiles");
+    let mut mint = Mint::new("tests/goldenfiles/parser");
     let mut file = mint.new_goldenfile("test.rs").unwrap();
 
     let input = r#"

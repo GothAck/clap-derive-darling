@@ -6,7 +6,7 @@ use clap_derive_darling::{ArgEnum, Args, Clap, Parser, Subcommand};
 ///
 /// Longer
 struct Application {
-    #[clap(long, short)]
+    #[clap(long, short, default_value = "name-goes-here")]
     /// Name
     ///
     /// Longer name
@@ -45,7 +45,8 @@ struct Application {
     name = "TestArgs",
     version,
     author = "Test Author",
-    help_heading = "Other heading"
+    help_heading = "Other heading",
+    flatten("flat")
 )]
 struct Flatten {
     #[clap(skip)]

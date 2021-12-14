@@ -481,3 +481,6 @@ impl ClapDocCommon for ClapSubcommandVariant {
 impl ClapDocCommonAuto for ClapSubcommandVariant {
     type Marker = ClapDocAboutMarker;
 }
+
+#[cfg(test)]
+mod test;

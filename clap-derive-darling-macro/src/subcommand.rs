@@ -7,9 +7,9 @@ use syn::Ident;
 
 use crate::{
     common::{
-        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldParent, ClapFieldStructs,
-        ClapFields, ClapIdentName, ClapIdentNameContainer, ClapParserArgsCommon, ClapTokensResult,
-        ClapTraitImpls,
+        ClapCommonIdents, ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldParent,
+        ClapFieldStructs, ClapFields, ClapIdentName, ClapIdentNameContainer, ClapParserArgsCommon,
+        ClapTokensResult, ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
@@ -30,7 +30,7 @@ impl ClapIdentName for ClapSubcommand {
         None
     }
 }
-
+impl ClapCommonIdents for ClapSubcommand {}
 impl ClapTokensResult for ClapSubcommand {
     fn to_tokens_result(&self) -> Result<TokenStream> {
         let impl_from_arg_matches = self.to_tokens_impl_from_arg_matches()?;
@@ -74,6 +74,8 @@ impl ClapSubcommand {
 
     fn to_tokens_impl_from_arg_matches(&self) -> Result<TokenStream> {
         let ident = &self.ident;
+        let arg_matches_ident = self.get_arg_matches_ident();
+        let prefix_ident = self.get_prefix_ident();
 
         let from_arg_matches_variants = self
             .get_variants()
@@ -89,10 +91,10 @@ impl ClapSubcommand {
 
         Ok(quote! {
             impl clap_derive_darling::FromArgMatches for #ident {
-                fn from_arg_matches(arg_matches: &clap::ArgMatches, prefix: Option<String>) -> Result<Self, clap::Error> {
-                    if let Some((clap_name, sub_arg_matches)) = arg_matches.subcommand() {
+                fn from_arg_matches(#arg_matches_ident: &clap::ArgMatches, #prefix_ident: Option<String>) -> Result<Self, clap::Error> {
+                    if let Some((clap_name, sub_arg_matches)) = #arg_matches_ident.subcommand() {
                         {
-                            let arg_matches = sub_arg_matches;
+                            let #arg_matches_ident = sub_arg_matches;
 
                             #(#from_arg_matches_variants)*
                         }
@@ -101,13 +103,13 @@ impl ClapSubcommand {
                         Err(clap::Error::raw(clap::ErrorKind::MissingSubcommand, "A subcommand is required but one was not provided"))
                     }
                 }
-                fn update_from_arg_matches(&mut self, arg_matches: &clap::ArgMatches, prefix: Option<String>) -> Result<(), clap::Error> {
-                    if let Some((clap_name, sub_arg_matches)) = arg_matches.subcommand() {
+                fn update_from_arg_matches(&mut self, #arg_matches_ident: &clap::ArgMatches, #prefix_ident: Option<String>) -> Result<(), clap::Error> {
+                    if let Some((clap_name, sub_arg_matches)) = #arg_matches_ident.subcommand() {
                         match self {
                             #(#update_from_arg_matches_variants)*
 
                             s => {
-                                *s = <Self as clap_derive_darling::FromArgMatches>::from_arg_matches(arg_matches, prefix)?;
+                                *s = <Self as clap_derive_darling::FromArgMatches>::from_arg_matches(#arg_matches_ident, #prefix_ident)?;
                             }
                         }
                     }
@@ -119,6 +121,8 @@ impl ClapSubcommand {
 
     fn to_tokens_impl_subcommand(&self) -> Result<TokenStream> {
         let ident = &self.ident;
+        let app_ident = self.get_app_ident();
+        let prefix_ident = self.get_prefix_ident();
 
         let augment_subcommands_variants = self
             .get_variants()
@@ -140,19 +144,15 @@ impl ClapSubcommand {
 
         Ok(quote! {
             impl clap_derive_darling::Subcommand for #ident {
-                fn augment_subcommands<'b>(clap_app: clap::App<'b>, prefix: Option<String>) -> clap::App<'b> {
-                    let clap_app = clap_app;
-
+                fn augment_subcommands<'b>(#app_ident: clap::App<'b>, #prefix_ident: Option<String>) -> clap::App<'b> {
                     #(#augment_subcommands_variants)*
 
-                    clap_app
+                    #app_ident
                 }
-                fn augment_subcommands_for_update<'b>(clap_app: clap::App<'b>, prefix: Option<String>) -> clap::App<'b> {
-                    let clap_app = clap_app;
-
+                fn augment_subcommands_for_update<'b>(#app_ident: clap::App<'b>, #prefix_ident: Option<String>) -> clap::App<'b> {
                     #(#augment_subcommands_for_update_variants)*
 
-                    clap_app
+                    #app_ident
                 }
                 fn has_subcommand(clap_name: &str) -> bool {
                     #(#has_subcommands)*
@@ -218,10 +218,13 @@ impl ClapIdentName for ClapSubcommandVariant {
         }))
     }
 }
+impl ClapCommonIdents for ClapSubcommandVariant {}
 
 impl ClapSubcommandVariant {
     fn to_tokens_from_arg_matches_variant(&self) -> Result<TokenStream> {
         let ident = &self.ident;
+        let arg_matches_ident = self.get_arg_matches_ident();
+        let prefix_ident = self.get_prefix_ident();
         let name = self.get_name_or()?;
         let parent_ident = self.get_parent_or()?.get_ident_or()?;
 
@@ -235,7 +238,7 @@ impl ClapSubcommandVariant {
                     return Ok(#parent_ident::#ident(
                         ::std::iter::once(::std::string::String::from(clap_name))
                             .chain(
-                                arg_matches
+                                #arg_matches_ident
                                     .values_of("")
                                     .into_iter()
                                     .flatten()
@@ -251,8 +254,8 @@ impl ClapSubcommandVariant {
                 if #name == clap_name {
                     return Ok(#parent_ident::#ident(
                         <#first_field_ty as clap_derive_darling::FromArgMatches>::from_arg_matches(
-                            arg_matches,
-                            prefix,
+                            #arg_matches_ident,
+                            #prefix_ident,
                         )?,
                     ));
                 }
@@ -278,6 +281,9 @@ impl ClapSubcommandVariant {
 
     fn to_tokens_update_from_arg_matches_variant(&self) -> Result<TokenStream> {
         let ident = &self.ident;
+        let arg_matches_ident = self.get_arg_matches_ident();
+        let prefix_ident = self.get_prefix_ident();
+
         let name = self.get_name_or()?;
         let parent_ident = self.get_parent_or()?.get_ident_or()?;
 
@@ -299,7 +305,7 @@ impl ClapSubcommandVariant {
                 #parent_ident::#ident(ref mut clap_arg) if #name == clap_name => {
                     *clap_arg = ::std::iter::once(::std::string::String::from(clap_name))
                         .chain(
-                            arg_matches
+                            #arg_matches_ident
                                 .values_of("")
                                 .into_iter()
                                 .flatten()
@@ -311,11 +317,11 @@ impl ClapSubcommandVariant {
         } else if self.fields.is_newtype() {
             quote! {
                 #parent_ident::#ident(ref mut clap_arg) if #name == clap_name => {
-                    let arg_matches = sub_arg_matches;
+                    let #arg_matches_ident = sub_arg_matches;
                     clap_derive_darling::FromArgMatches::update_from_arg_matches(
                         clap_arg,
                         sub_arg_matches,
-                        prefix,
+                        #prefix_ident,
                     )?
                 }
             }
@@ -328,7 +334,7 @@ impl ClapSubcommandVariant {
 
             quote! {
                 #parent_ident::#ident { #(#fields_ref_mut)* } if #name == clap_name => {
-                    let arg_matches = sub_arg_matches;
+                    let #arg_matches_ident = sub_arg_matches;
                     {
                         #(#update_from_arg_matches_raw)*
                     }
@@ -344,6 +350,8 @@ impl ClapSubcommandVariant {
     }
 
     fn to_tokents_augment_subcommands_variant(&self) -> Result<TokenStream> {
+        let app_ident = self.get_app_ident();
+
         let name = self.get_name_or()?;
 
         let author_and_version = self.to_tokens_author_and_version();
@@ -355,17 +363,17 @@ impl ClapSubcommandVariant {
             quote! {}
         } else if self.external_subcommand {
             quote! {
-                let clap_app = clap_app.subcommand({
+                let #app_ident = #app_ident.subcommand({
                     let clap_subcommand = clap::App::new(#name);
 
                     clap_subcommand
                 });
-                let clap_app = clap_app.setting(clap::AppSettings::AllowExternalSubcommands);
+                let #app_ident = #app_ident.setting(clap::AppSettings::AllowExternalSubcommands);
             }
         } else if self.fields.is_newtype() {
             let first_field_ty = &fields[0].ty;
             quote! {
-                let clap_app = clap_app.subcommand({
+                let #app_ident = #app_ident.subcommand({
                     let clap_subcommand = clap::App::new(#name);
 
                     let clap_subcommand = {
@@ -385,14 +393,14 @@ impl ClapSubcommandVariant {
                 .collect::<Result<Vec<_>>>()?;
 
             quote! {
-                let clap_app = clap_app.subcommand({
+                let #app_ident = #app_ident.subcommand({
                     let clap_subcommand = clap::App::new(#name);
                     {
-                        let app = clap_subcommand;
+                        let #app_ident = clap_subcommand;
 
                         #(#augment)*
 
-                        app
+                        #app_ident
                             #author_and_version
                             #app_call_help_about
                     }

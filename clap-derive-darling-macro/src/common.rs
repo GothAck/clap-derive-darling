@@ -36,6 +36,30 @@ pub(crate) trait ClapIdentName {
     }
 }
 
+pub(crate) trait ClapCommonIdents {
+    fn get_name_ident(&self) -> Ident {
+        format_ident!("___name")
+    }
+    fn get_value_ident(&self) -> Ident {
+        format_ident!("___value")
+    }
+    fn get_long_ident(&self) -> Ident {
+        format_ident!("___long")
+    }
+    fn get_env_ident(&self) -> Ident {
+        format_ident!("___env")
+    }
+    fn get_app_ident(&self) -> Ident {
+        format_ident!("___app")
+    }
+    fn get_prefix_ident(&self) -> Ident {
+        format_ident!("___prefix")
+    }
+    fn get_arg_matches_ident(&self) -> Ident {
+        format_ident!("___arg_matches")
+    }
+}
+
 pub(crate) trait ClapFieldParent: ClapIdentName + DynClone {
     fn get_ident_with_parent(&self) -> Result<Ident>;
 }
@@ -171,10 +195,12 @@ pub(crate) trait ClapFieldStructs: ClapIdentName + ClapFields + Clone {
 }
 
 pub(crate) trait ClapTraitImpls:
-    ClapIdentName + ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
+    ClapCommonIdents + ClapIdentName + ClapFieldStructs + ClapParserArgsCommon + ClapDocCommon
 {
     fn to_tokens_impl_args(&self) -> Result<TokenStream> {
         let ident = self.get_ident_or()?;
+        let app_ident = self.get_app_ident();
+        let prefix_ident = self.get_prefix_ident();
 
         let help_heading = self.to_tokens_help_heading();
         let author_and_version = self.to_tokens_author_and_version();
@@ -185,21 +211,21 @@ pub(crate) trait ClapTraitImpls:
 
         Ok(quote! {
             impl clap_derive_darling::Args for #ident {
-                fn augment_args(app: clap::App<'_>, prefix: Option<String>) -> clap::App<'_> {
+                fn augment_args(#app_ident: clap::App<'_>, #prefix_ident: Option<String>) -> clap::App<'_> {
                     #help_heading
 
                     #(#augment_args_fields)*
 
-                    app
+                    #app_ident
                         #author_and_version
                         #app_call_help_about
                 }
-                fn augment_args_for_update(app: clap::App<'_>, prefix: Option<String>) -> clap::App<'_> {
+                fn augment_args_for_update(#app_ident: clap::App<'_>, #prefix_ident: Option<String>) -> clap::App<'_> {
                     #help_heading
 
                     #(#augment_args_for_update_fields)*
 
-                    app
+                    #app_ident
                         #author_and_version
                         #app_call_help_about
                 }
@@ -209,20 +235,22 @@ pub(crate) trait ClapTraitImpls:
 
     fn to_tokens_impl_from_arg_matches(&self) -> Result<TokenStream> {
         let ident = self.get_ident_or()?;
+        let arg_matches_ident = self.get_arg_matches_ident();
+        let prefix_ident = self.get_prefix_ident();
 
         let from_arg_matches_fields = self.to_tokens_from_arg_matches_fields()?;
         let update_from_arg_matches_fields = self.to_tokens_update_from_arg_matches_fields()?;
 
         Ok(quote! {
             impl clap_derive_darling::FromArgMatches for #ident {
-                fn from_arg_matches(arg_matches: &clap::ArgMatches, prefix: Option<String>) -> Result<Self, clap::Error> {
+                fn from_arg_matches(#arg_matches_ident: &clap::ArgMatches, #prefix_ident: Option<String>) -> Result<Self, clap::Error> {
                     let v = #ident {
                         #(#from_arg_matches_fields)*
                     };
 
                     Ok(v)
                 }
-                fn update_from_arg_matches(&mut self, arg_matches: &clap::ArgMatches, prefix: Option<String>) -> Result<(), clap::Error> {
+                fn update_from_arg_matches(&mut self, #arg_matches_ident: &clap::ArgMatches, #prefix_ident: Option<String>) -> Result<(), clap::Error> {
                     #(#update_from_arg_matches_fields)*
 
                     Ok(())
@@ -233,17 +261,18 @@ pub(crate) trait ClapTraitImpls:
 
     fn to_tokens_impl_into_app(&self) -> Result<TokenStream> {
         let ident = self.get_ident_or()?;
+        let app_ident = self.get_app_ident();
         let name = self.get_name_or()?;
 
         Ok(quote! {
             impl clap::IntoApp for #ident {
                 fn into_app<'help>() -> clap::App<'help> {
-                    let app = clap::App::new(#name);
-                    <Self as clap_derive_darling::Args>::augment_args(app, None)
+                    let #app_ident = clap::App::new(#name);
+                    <Self as clap_derive_darling::Args>::augment_args(#app_ident, None)
                 }
                 fn into_app_for_update<'help>() -> clap::App<'help> {
-                    let app = clap::App::new(#name);
-                    <Self as clap_derive_darling::Args>::augment_args_for_update(app, None)
+                    let #app_ident = clap::App::new(#name);
+                    <Self as clap_derive_darling::Args>::augment_args_for_update(#app_ident, None)
                 }
             }
 
@@ -252,7 +281,7 @@ pub(crate) trait ClapTraitImpls:
     }
 }
 
-pub(crate) trait ClapParserArgsCommon {
+pub(crate) trait ClapParserArgsCommon: ClapCommonIdents {
     fn get_author(&self) -> Option<&Override<String>>;
     fn get_version(&self) -> Option<&Override<String>>;
     fn get_help_heading(&self) -> Option<&String>;
@@ -282,9 +311,11 @@ pub(crate) trait ClapParserArgsCommon {
     }
 
     fn to_tokens_help_heading(&self) -> Option<TokenStream> {
+        let app_ident = self.get_app_ident();
+
         self.get_help_heading().map(|string| {
             quote! {
-                let app = app.help_heading(#string);
+                let #app_ident = #app_ident.help_heading(#string);
             }
         })
     }

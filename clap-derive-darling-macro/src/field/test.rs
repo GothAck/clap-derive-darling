@@ -17,11 +17,10 @@ use crate::{
 };
 
 #[derive(Clone, Debug, FromDeriveInput)]
-#[darling(attributes(clap), forward_attrs(doc), supports(struct_named))]
+#[darling(attributes(clap), supports(struct_named))]
 pub(crate) struct StructParser {
     ident: Ident,
     data: ast::Data<Ignored, ClapField>,
-    attrs: Vec<syn::Attribute>,
 
     #[darling(default)]
     flatten: VecStringAttr,

@@ -6,8 +6,8 @@ use quote::{format_ident, quote};
 use syn::{Expr, GenericArgument, Ident, LitStr, Path, PathArguments, Type};
 
 use crate::common::{
-    ClapDocCommon, ClapDocCommonAuto, ClapDocHelpMarker, ClapFieldParent, ClapIdentName,
-    ClapTokensResult,
+    ClapCommonIdents, ClapDocCommon, ClapDocCommonAuto, ClapDocHelpMarker, ClapFieldParent,
+    ClapIdentName, ClapTokensResult,
 };
 
 use super::{RenameAll, RenameAllCasing};
@@ -328,20 +328,23 @@ impl ClapField {
         parse.defaulted()
     }
 
-    fn get_flatten(&self) -> (TokenStream, Option<TokenStream>) {
+    fn get_flatten(&self) -> (Ident, Option<TokenStream>) {
+        let prefix_ident = self.get_prefix_ident();
+
         if let Some(flatten) = &self.flatten {
+            let subprefix_ident = format_ident!("___subprefix");
             let prefix = match flatten {
                 Override::Explicit(prefix) => Some(quote! { vec.push(#prefix.to_string()); }),
                 Override::Inherit => None,
             };
 
             (
-                quote!(subprefix),
+                subprefix_ident.clone(),
                 Some(quote! {
-                    let subprefix = {
+                    let #subprefix_ident = {
                         let mut vec = Vec::new();
-                        if let Some(prefix) = prefix.as_ref() {
-                            vec.push(prefix.to_string());
+                        if let Some(#prefix_ident) = #prefix_ident.as_ref() {
+                            vec.push(#prefix_ident.to_string());
                         }
                         #prefix
                         if vec.is_empty() {
@@ -353,12 +356,15 @@ impl ClapField {
                 }),
             )
         } else {
-            (quote!(prefix), None)
+            (self.get_prefix_ident(), None)
         }
     }
 
     pub fn to_tokens_augment(&self) -> Result<TokenStream> {
         let (arg_type, stripped_type_path) = self.get_arg_type()?;
+
+        let app_ident = self.get_app_ident();
+        let prefix_ident = self.get_prefix_ident();
 
         Ok(if self.subcommand {
             let ty = &self.ty;
@@ -367,8 +373,8 @@ impl ClapField {
             }
 
             quote! {
-                let app = <#ty as clap_derive_darling::Subcommand>::augment_subcommands(app, prefix.clone());
-                let app = app.setting(clap::AppSettings::SubcommandRequiredElseHelp);
+                let #app_ident = <#ty as clap_derive_darling::Subcommand>::augment_subcommands(#app_ident, #prefix_ident.clone());
+                let #app_ident = #app_ident.setting(clap::AppSettings::SubcommandRequiredElseHelp);
             }
         } else if self.skip.is_some() {
             quote! {}
@@ -378,12 +384,12 @@ impl ClapField {
             let (prefix_ident, subprefix) = self.get_flatten();
 
             quote! {
-                let old_heading = app.get_help_heading();
+                let old_heading = #app_ident.get_help_heading();
 
                 #subprefix
 
-                let app = <#ty as clap_derive_darling::Args>::augment_args(app, #prefix_ident.clone());
-                let app = app.help_heading(old_heading);
+                let #app_ident = <#ty as clap_derive_darling::Args>::augment_args(#app_ident, #prefix_ident.clone());
+                let #app_ident = #app_ident.help_heading(old_heading);
             }
         } else {
             let name = self.get_name_or()?;
@@ -539,29 +545,13 @@ impl ClapField {
             let required_idents = self.to_tokens_required_idents(required_idents)?;
 
             quote! {
-                let app = app.arg({
+                let #app_ident = #app_ident.arg({
                     #(#required_idents)*
 
                     #builder
                 });
             }
         })
-    }
-
-    fn get_name_ident(&self) -> Ident {
-        format_ident!("___name")
-    }
-
-    fn get_value_ident(&self) -> Ident {
-        format_ident!("___value")
-    }
-
-    fn get_long_ident(&self) -> Ident {
-        format_ident!("___long")
-    }
-
-    fn get_env_ident(&self) -> Ident {
-        format_ident!("___env")
     }
 
     fn to_tokens_required_idents(
@@ -586,6 +576,8 @@ impl ClapField {
     }
 
     fn to_tokens_required_ident(&self, req_ident: &Ident, val: &str) -> Result<TokenStream> {
+        let prefix_ident = self.get_prefix_ident();
+
         let rename = {
             if req_ident == &self.get_env_ident() {
                 self.rename_all_env
@@ -612,7 +604,7 @@ impl ClapField {
                         let val = format!("{}_{}", prefix, val).to_rename_all_case(rename);
 
                         quote! {
-                            if prefix == #prefix {
+                            if #prefix_ident == #prefix {
                                 #val
                             } else
                         }
@@ -621,9 +613,9 @@ impl ClapField {
 
                 quote! {
                     {
-                        if let Some(prefix) = &prefix {
+                        if let Some(#prefix_ident) = &#prefix_ident {
                             #(#if_vals)* {
-                                panic!("Prefix {} not defined for {}", prefix, #parent_ident_str);
+                                panic!("Prefix {} not defined for {}", #prefix_ident, #parent_ident_str);
                             }
                         } else {
                             #none_val
@@ -695,6 +687,9 @@ impl ClapField {
 
     fn to_tokens_parse(&self, update_ident: Option<Ident>) -> Result<TokenStream> {
         let ty = &self.ty;
+        let arg_matches_ident = self.get_arg_matches_ident();
+        let prefix_ident = self.get_prefix_ident();
+
         let (arg_type, stripped_type_path) = self.get_arg_type()?;
 
         Ok(if self.subcommand {
@@ -706,13 +701,13 @@ impl ClapField {
                 quote! {
                     <#ty as clap_derive_darling::FromArgMatches>::update_from_arg_matches(
                         #update_ident,
-                        arg_matches,
-                        prefix
+                        #arg_matches_ident,
+                        #prefix_ident
                     )?
                 }
             } else {
                 quote! {
-                    <#ty as clap_derive_darling::FromArgMatches>::from_arg_matches(arg_matches, prefix.clone())?
+                    <#ty as clap_derive_darling::FromArgMatches>::from_arg_matches(#arg_matches_ident, #prefix_ident.clone())?
                 }
             }
         } else if let Some(skip) = self.skip.as_ref() {
@@ -730,7 +725,7 @@ impl ClapField {
 
                         clap_derive_darling::FromArgMatches::update_from_arg_matches(
                             #update_ident,
-                            arg_matches,
+                            #arg_matches_ident,
                             #prefix_ident
                         )
                     }
@@ -740,7 +735,7 @@ impl ClapField {
                     {
                         #subprefix
 
-                        clap_derive_darling::FromArgMatches::from_arg_matches(arg_matches, #prefix_ident).unwrap()
+                        clap_derive_darling::FromArgMatches::from_arg_matches(#arg_matches_ident, #prefix_ident).unwrap()
                     }
                 }
             }
@@ -775,11 +770,11 @@ impl ClapField {
 
             let builder = if matches!(arg_type, ClapArgType::Bool) {
                 quote! {
-                    arg_matches.is_present(#name_ident)
+                    #arg_matches_ident.is_present(#name_ident)
                 }
             } else if matches!(arg_type, ClapArgType::VecT | ClapArgType::OptionVecT) {
                 quote! {
-                    arg_matches
+                    #arg_matches_ident
                         .values_of(&#name_ident)
                         .map(|v| {
                             v.map(|s| #mapper)
@@ -789,7 +784,7 @@ impl ClapField {
                 }
             } else {
                 quote! {
-                    arg_matches
+                    #arg_matches_ident
                         .value_of(&#name_ident)
                         .map(|s| #mapper)
                         .transpose()?
@@ -798,7 +793,7 @@ impl ClapField {
 
             let builder = if matches!(arg_type, ClapArgType::OptionOptionT) {
                 quote! {
-                    if arg_matches.is_present(&#name_ident) {
+                    if #arg_matches_ident.is_present(&#name_ident) {
                         Some(#builder)
                     } else {
                         None
@@ -854,7 +849,7 @@ impl ClapIdentName for ClapField {
             .or_else(|| self.ident.as_ref().map(|i| i.to_string()))
     }
 }
-
+impl ClapCommonIdents for ClapField {}
 impl ClapDocCommon for ClapField {
     fn get_attrs(&self) -> Vec<syn::Attribute> {
         self.attrs.clone()

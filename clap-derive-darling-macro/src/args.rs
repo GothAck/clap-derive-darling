@@ -8,8 +8,9 @@ use syn::Ident;
 
 use crate::{
     common::{
-        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapIdentName, ClapParserArgsCommon, ClapTokensResult, ClapTraitImpls, VecStringAttr,
+        ClapCommonIdents, ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs,
+        ClapFields, ClapIdentName, ClapParserArgsCommon, ClapTokensResult, ClapTraitImpls,
+        VecStringAttr,
     },
     field::ClapField,
     RenameAll,
@@ -56,6 +57,7 @@ impl ClapIdentName for ClapArgs {
         self.name.clone()
     }
 }
+impl ClapCommonIdents for ClapArgs {}
 
 impl ClapTokensResult for ClapArgs {
     fn to_tokens_result(&self) -> Result<proc_macro2::TokenStream> {

@@ -5,7 +5,7 @@ use quote::quote;
 use syn::Ident;
 
 use crate::{
-    common::{ClapIdentName, ClapParserArgsCommon, ClapTokensResult},
+    common::{ClapCommonIdents, ClapIdentName, ClapParserArgsCommon, ClapTokensResult},
     RenameAll, RenameAllCasing,
 };
 
@@ -29,6 +29,7 @@ impl ClapTokensResult for ClapArgEnum {
     }
 }
 
+impl ClapCommonIdents for ClapArgEnum {}
 impl ClapParserArgsCommon for ClapArgEnum {
     fn get_author(&self) -> Option<&Override<String>> {
         None

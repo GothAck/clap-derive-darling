@@ -10,8 +10,8 @@ use syn::Ident;
 
 use crate::{
     common::{
-        ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs, ClapFields,
-        ClapIdentName, ClapParserArgsCommon, ClapTokensResult, ClapTraitImpls,
+        ClapCommonIdents, ClapDocAboutMarker, ClapDocCommon, ClapDocCommonAuto, ClapFieldStructs,
+        ClapFields, ClapIdentName, ClapParserArgsCommon, ClapTokensResult, ClapTraitImpls,
     },
     field::ClapField,
     RenameAll, RenameAllCasing,
@@ -60,7 +60,7 @@ impl ClapIdentName for ClapParser {
         }))
     }
 }
-
+impl ClapCommonIdents for ClapParser {}
 impl ClapTokensResult for ClapParser {
     fn to_tokens_result(&self) -> Result<proc_macro2::TokenStream> {
         let impl_args = self.to_tokens_impl_args()?;
